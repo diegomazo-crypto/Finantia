@@ -213,14 +213,19 @@ const cedulaDe = (v, r) => {
 export function interpretarEquipo(filas, mapa) {
   const h = encabezadoEquipo(filas);
   if (h < 0) falla(DATOS_INVALIDOS, 'No se encontró el encabezado del plan del equipo (Item informe, Costo anual, Salario 2027)');
-  const col = columnas(filas[h], COL_EQUIPO), out = [];
+  const col = columnas(filas[h], COL_EQUIPO), out = [], excluidos = {}, desconocidos = {};
   for (let i = h + 1; i < filas.length; i++) {
     const f = filas[i], r = i + 1, val = k => (col[k] == null ? '' : f[col[k]] ?? ''), txt = k => String(val(k)).trim();
     if (!txt('proceso')) continue; /* totales o notas */
     if (out.length >= MAX_FILAS) falla(DATOS_INVALIDOS, `El archivo supera ${MAX_FILAS} personas`);
     const m = mapa.procesos[normal(txt('proceso'))];
-    if (!m) falla(DATOS_INVALIDOS, `Fila ${r}: el ítem informe "${txt('proceso')}" no está en la asignación del modelo. Ítems conocidos: ${Object.values(mapa.procesos).map(x => x.proceso).join(', ')}`);
     const num = k => { if (col[k] == null) return 0; const x = numero(val(k)); if (!Number.isFinite(x) || x < 0) falla(DATOS_INVALIDOS, `Fila ${r}: valor inválido en ${COL_EQUIPO[k][0]} ("${val(k)}")`); return x; };
+    if (!m) {
+      /* Docentes ocasionales y de cátedra: no son planta; el modelo los costea en CPS con la programación académica (como la 1.0) */
+      if (FUERA_DE_PLANTA.test(normal(txt('proceso')))) { const x = excluidos[txt('proceso')] ??= { filas: 0, costo: 0 }; x.filas++; x.costo += num('costo'); }
+      else (desconocidos[txt('proceso')] ??= []).push(r);
+      continue;
+    }
     const rubro = rubroDe(txt('area')) || rubroDe(m.area);
     const s27 = col.s27 != null ? num('s27') : num('s27o');
     const e = { rubro, area: (rubroDe(txt('area')) ? txt('area') : m.area).slice(0, 80), proceso: m.proceso, centro: txt('centro').slice(0, 120), nodo: txt('nodo').slice(0, 60), s27, costo: num('costo') };
@@ -228,9 +233,13 @@ export function interpretarEquipo(filas, mapa) {
     const nom = txt('nombre').slice(0, 160); if (nom) e.nombre = nom;
     out.push(e);
   }
+  const d = Object.entries(desconocidos);
+  if (d.length) falla(DATOS_INVALIDOS, `Ítems informe que no están en la asignación del modelo: ${d.map(([k, f]) => `"${k}" (fila${f.length > 1 ? 's' : ''} ${f.slice(0, 5).join(', ')}${f.length > 5 ? '…' : ''})`).join('; ')}. `
+    + `Ítems conocidos: ${Object.values(mapa.procesos).map(x => x.proceso).join(', ')}. Los docentes ocasionales y de cátedra se excluyen solos (van en CPS).`);
   if (!out.length) falla(DATOS_INVALIDOS, 'El plan del equipo no tiene filas');
-  return out;
+  return { equipo: out, excluidos };
 }
+const FUERA_DE_PLANTA = /(^|_)(ocasional(es)?|catedra)(_|$)/;
 
 /** Base de nómina → { cédula: { s26, cargo } }. */
 export function interpretarBdd(filas) {
@@ -281,14 +290,14 @@ export function contenidoDeArchivo(celdas, previo, { mapa, nLineas }) {
   if (encabezadoPersonas(celdas) >= 0) return { formato: 'personas', personas: interpretarPersonas(celdas, nLineas) };
   const bddPrevio = previo?.bdd || null, equipoPrevio = previo?.equipo || null;
   if (encabezadoEquipo(celdas) >= 0) {
-    const equipo = interpretarEquipo(celdas, mapa), personas = combinarEquipo(equipo, bddPrevio || {}, mapa);
+    const { equipo, excluidos } = interpretarEquipo(celdas, mapa), personas = combinarEquipo(equipo, bddPrevio || {}, mapa);
     const e = revisarAsignacion(personas, nLineas); if (e) falla(DATOS_INVALIDOS, e);
-    return { formato: 'personas', personas, equipo, ...(bddPrevio ? { bdd: bddPrevio } : {}) };
+    return { formato: 'personas', personas, equipo, excluidos, ...(bddPrevio ? { bdd: bddPrevio } : {}) };
   }
   if (encabezadoBdd(celdas) >= 0) {
     const bdd = interpretarBdd(celdas);
     if (!equipoPrevio) return { formato: 'bdd', bdd };
-    return { formato: 'personas', personas: combinarEquipo(equipoPrevio, bdd, mapa), equipo: equipoPrevio, bdd };
+    return { formato: 'personas', personas: combinarEquipo(equipoPrevio, bdd, mapa), equipo: equipoPrevio, excluidos: previo.excluidos || {}, bdd };
   }
   return interpretarNomina(celdas);
 }
@@ -297,6 +306,14 @@ export function contenidoDeArchivo(celdas, previo, { mapa, nLineas }) {
 export function avisosCarga(contenido) {
   if (contenido?.formato === 'bdd') return [`Base de nómina cargada (${Object.keys(contenido.bdd).length} personas). Falta el plan por persona del equipo: súbalo y se cruzan por cédula.`];
   if (!contenido?.equipo) return [];
+  const av = [], ex = Object.entries(contenido.excluidos || {});
+  if (ex.length) {
+    const f = ex.reduce((s, [, x]) => s + x.filas, 0), c = ex.reduce((s, [, x]) => s + x.costo, 0);
+    av.push(`No entran al plan ${f} fila${f === 1 ? '' : 's'} de docentes ocasionales y de cátedra (${ex.map(([k]) => k).join(', ')}; $${Math.round(c / 1e6).toLocaleString('es-CO')} M en el archivo): no son planta y el modelo los costea en Costo de prestación con la programación académica, como en la 1.0.`);
+  }
+  return [...av, ...avisosCruce(contenido)];
+}
+function avisosCruce(contenido) {
   if (!contenido.bdd) return ['Falta la base de nómina (cargo y salario actual). Mientras no se suba, todos los que tienen salario 2027 cuentan como cargos nuevos y sin incremento desde abril.'];
   const fuera = new Set(contenido.equipo.filter(e => e.cedula && e.s27 > 0 && !contenido.bdd[e.cedula]).map(e => e.cedula)).size;
   return fuera ? [`${fuera} persona${fuera === 1 ? '' : 's'} del plan con salario 2027 no está${fuera === 1 ? '' : 'n'} en la base de nómina: cuenta${fuera === 1 ? '' : 'n'} como cargo nuevo.`] : [];

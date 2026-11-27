@@ -336,6 +336,7 @@ describe('plan del equipo + base de nómina (datos inventados)', () => {
     ';PLAZA NUEVA;COMERCIAL BQLLA;2000000;2000000;36000000;Ventas;Gastos de Venta y Publicidad;Barranquilla',
     ';COMISIONES;COMERCIAL SABANETA;0;0;50000000;Ventas;Gastos de Venta y Publicidad;Sabaneta',
     ';VACANTE;INVESTIGACIONES;0;0;0;Administración Académica;Investigación;Sabaneta',
+    ';OCASIONALES;DOCENTES OCASIONALES;0;0;90000000;Costos de Prestación del Servicio;Docentes Ocasionales Pregrado Sabaneta;Sabaneta',
     ';;;;;311000000;;;'
   ].join('\n'));
   const bdd = leerCsv('DOCUMENTO;NOMBRE;CECO;CARGO; VALORES ADICIONALES ; SALARIO ;CIA\n111;PERSONA UNO;X;ANALISTA FINANCIERO;0;9000000;CEIPA\n222;PERSONA DOS;Y;DOCENTE;0;4800000;CEIPA');
@@ -343,7 +344,7 @@ describe('plan del equipo + base de nómina (datos inventados)', () => {
   test('se cruzan por cédula en cualquier orden', () => {
     const solo = contenidoDeArchivo(plan, null, op);
     assert.equal(solo.personas.length, 6);
-    assert.match(avisosCarga(solo)[0], /Falta la base de nómina/);
+    assert.ok(avisosCarga(solo).some(a => /Falta la base de nómina/.test(a)));
     const c = contenidoDeArchivo(bdd, solo, op), d = contenidoDeArchivo(plan, contenidoDeArchivo(bdd, null, op), op);
     assert.deepEqual(c.personas, d.personas);
     const [uno, dosA, dosB, nuevo, bolsa, vac] = c.personas;
@@ -352,11 +353,12 @@ describe('plan del equipo + base de nómina (datos inventados)', () => {
     assert.equal(dosA.peso, 0.5); assert.equal(dosB.peso, 0.5); assert.equal(dosA.unidad, 'PRE'); assert.equal(dosB.unidad, 'MAE');
     assert.equal(nuevo.s26, null); assert.equal(nuevo.unidad, 'BAQ');
     assert.equal(bolsa.bolsa, 50000000); assert.equal(vac.bolsa, null); assert.equal(vac.s27, 0);
-    assert.deepEqual(avisosCarga(c), []);
+    assert.equal(avisosCarga(c).length, 1);
+    assert.match(avisosCarga(c)[0], /No entran al plan 1 fila de docentes ocasionales y de cátedra \(Docentes Ocasionales Pregrado Sabaneta; \$90 M/);
   });
   test('ítem desconocido y archivo sin formato', () => {
     const malo = leerCsv('Cedula;Nombre colaborador;SALARIO 2027;Costo anual;Area;Item informe;Nodo\n1;A;1;12;Ventas;Inventado;Sabaneta');
-    assert.throws(() => contenidoDeArchivo(malo, null, op), /ítem informe "Inventado" no está/);
+    assert.throws(() => contenidoDeArchivo(malo, null, op), /Ítems informe que no están en la asignación del modelo: "Inventado" \(fila 2\)/);
     assert.match(avisosCarga(contenidoDeArchivo(bdd, null, op))[0], /Base de nómina cargada \(2 personas\)/);
   });
 });
