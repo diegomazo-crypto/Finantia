@@ -55,7 +55,7 @@ async function pantallaIngreso(error) {
     <h1>Finantia</h1><p class="nota">Plataforma financiera de la Institución Universitaria CEIPA</p>
     <div class="tarjeta">
       ${error ? `<p class="nota neg">${esc(error)}</p>` : ''}
-      ${dev ? `<h3>Modo de desarrollo</h3><p class="nota">Sin Microsoft 365. Elija con qué usuario entrar.</p><div class="usuarios-demo" id="lista-dev">Cargando…</div>`
+      ${dev ? `<h3>${sesion.config.pruebas ? 'Sitio de pruebas' : 'Modo de desarrollo'}</h3><p class="nota">Sin Microsoft 365. Elija con qué usuario entrar.</p><div class="usuarios-demo" id="lista-dev">Cargando…</div>`
             : `<p>Ingrese con su cuenta institucional de Microsoft 365.</p><button class="btn primario" id="entrar-ms" type="button">Ingresar con Microsoft</button>`}
     </div></div>`;
   if (!dev) { $('#entrar-ms').onclick = () => sesion.msal.loginRedirect({ scopes: ['openid', 'profile', 'email'] }); return; }

@@ -18,6 +18,24 @@ npm run demo        # http://localhost:3000
 
 Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo, uno por rol, y la versión 1 del presupuesto 2027. En modo de desarrollo no se usa Microsoft 365: la pantalla de ingreso deja elegir el usuario.
 
+### Servidor de pruebas en internet
+
+Para seguir desarrollando sobre un servidor web mientras no se conecta Microsoft 365:
+
+```bash
+docker build -t finantia .
+docker run -p 3000:3000 -e FINANTIA_CLAVE_PRUEBAS='una clave larga' -v finantia-datos:/datos finantia
+```
+
+o, sin contenedor, `FINANTIA_MODO_PRUEBAS=1 FINANTIA_CLAVE_PRUEBAS=... npm run iniciar`.
+
+- Todo el sitio, pantallas incluidas, pide la clave (autenticación básica HTTP; el usuario puede ser cualquiera). La clave debe tener 12 caracteres o más y va solo en las variables del servidor, nunca en el repositorio.
+- Dentro, la pantalla de ingreso deja elegir uno de los usuarios de ejemplo, como en `npm run demo`.
+- La base es PostgreSQL si hay `DATABASE_URL`; si no, PGlite guardada en `FINANTIA_DIR_DATOS` (en el contenedor, el volumen `/datos`). Los cambios se conservan entre reinicios. La primera vez se siembran los usuarios de ejemplo y la versión 1 del presupuesto 2027.
+- No lleva datos por persona: la nómina por cargo queda desactivada (sin `FINANTIA_LLAVE_NOMINA`), y el auxiliar contable por centro de costos y cuenta y la evaluación del equipo no se cargan salvo con `FINANTIA_PRUEBAS_DETALLE=1`.
+- Use siempre HTTPS (lo da el servicio de alojamiento): con HTTP la clave viaja sin cifrar.
+- Para producción se quita `FINANTIA_MODO_PRUEBAS` y se configuran `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`.
+
 ### Demostración sin servidor
 
 `node herramientas/demo_enlace.mjs CARPETA` arma una copia de las pantallas que funciona sola en el navegador: `demo-enlace/api.js` responde las llamadas de la API en memoria con el mismo motor, las mismas reglas de permisos y las mismas validaciones. Sirve para mostrar Finantia sin instalar nada. Los cambios se pierden al recargar, y no hay Microsoft 365, cifrado ni asistente.

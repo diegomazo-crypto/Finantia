@@ -24,7 +24,7 @@ function perfil(a) {
 
 export function rutasApi(db, auth, asistente, nomina) {
   const rutas = [
-    ruta('GET', '/api/config', () => (auth.modo === 'entra' ? { modo: 'entra', tenant: auth.tenant, clientId: auth.clientId } : { modo: 'desarrollo' }), { publica: true }),
+    ruta('GET', '/api/config', () => (auth.modo === 'entra' ? { modo: 'entra', tenant: auth.tenant, clientId: auth.clientId } : (auth.pruebas ? { modo: 'desarrollo', pruebas: true } : { modo: 'desarrollo' })), { publica: true }),
     ruta('POST', '/api/ingreso', ({ actor }) => perfil(actor), { registrarIngreso: true }),
     ruta('GET', '/api/yo', ({ actor }) => perfil(actor)),
 

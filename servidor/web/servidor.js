@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, normalize, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorFinantia } from '../errores.js';
-import { configurarAutenticacion, identificar } from './autenticacion.js';
+import { claveCorrecta, configurarAutenticacion, identificar } from './autenticacion.js';
 import { rutasApi } from './api.js';
 import { crearAsistente } from '../presupuesto/asistente.js';
 import { crearNomina } from '../presupuesto/nomina.js';
@@ -70,6 +70,10 @@ export function crearServidor(db, { auth = configurarAutenticacion(), asistente 
   const rutas = rutasApi(db, auth, asistente, nomina);
   return createServer(async (req, res) => {
     cabecerasSeguridad(res);
+    if (auth.pruebas && !claveCorrecta(auth, req)) {
+      res.writeHead(401, { 'WWW-Authenticate': 'Basic realm="Finantia pruebas", charset="UTF-8"', 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+      return res.end('Finantia 2.0 (pruebas): se necesita la clave del sitio.');
+    }
     const url = new URL(req.url, 'http://x');
     if (!url.pathname.startsWith('/api/')) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Método no permitido' });

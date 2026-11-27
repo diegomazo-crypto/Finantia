@@ -7,7 +7,12 @@
  * - Modo "desarrollo": sin Microsoft 365; el navegador elige un usuario registrado y lo envía
  *   en `X-Finantia-Correo`. Solo se activa con FINANTIA_MODO_DESARROLLO=1 y nunca con
  *   NODE_ENV=production.
+ * - Modo "pruebas": el de desarrollo, pero para un servidor de pruebas en internet. Se activa con
+ *   FINANTIA_MODO_PRUEBAS=1 y exige FINANTIA_CLAVE_PRUEBAS (12 caracteres o más): todo el sitio,
+ *   pantallas incluidas, queda detrás de esa clave (autenticación básica HTTP). Sí se permite
+ *   con NODE_ENV=production.
  */
+import { timingSafeEqual, createHash } from 'node:crypto';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { ingresar } from '../admin/identidad.js';
 import { cargarActor } from '../admin/permisos.js';
@@ -15,6 +20,11 @@ import { registrar as registrarBitacora } from '../admin/bitacora.js';
 import { falla, NO_AUTORIZADO, SIN_SESION } from '../errores.js';
 
 export function configurarAutenticacion(env = process.env) {
+  if (env.FINANTIA_MODO_PRUEBAS === '1') {
+    const clave = String(env.FINANTIA_CLAVE_PRUEBAS || '');
+    if (clave.length < 12) throw new Error('El modo de pruebas exige FINANTIA_CLAVE_PRUEBAS de 12 caracteres o más');
+    return { modo: 'desarrollo', pruebas: true, clave };
+  }
   const dev = env.FINANTIA_MODO_DESARROLLO === '1';
   if (dev && env.NODE_ENV === 'production') throw new Error('El modo de desarrollo no se permite con NODE_ENV=production');
   if (dev) return { modo: 'desarrollo' };
@@ -49,3 +59,15 @@ export async function identificar(db, auth, req, { registrar = false } = {}) {
   return ingresar(db, claims, { registrar });
 }
 
+
+const resumen = t => createHash('sha256').update(String(t)).digest();
+
+/** Modo de pruebas: ¿la petición trae la clave del sitio? (autenticación básica; el usuario puede ser cualquiera). */
+export function claveCorrecta(auth, req) {
+  const h = String(req.headers.authorization || '');
+  if (!h.startsWith('Basic ')) return false;
+  let txt;
+  try { txt = Buffer.from(h.slice(6), 'base64').toString('utf8'); } catch { return false; }
+  const i = txt.indexOf(':');
+  return i >= 0 && timingSafeEqual(resumen(txt.slice(i + 1)), resumen(auth.clave));
+}
