@@ -57,7 +57,7 @@ async function estatico(req, res) {
   if (!archivo.startsWith(raiz)) return json(res, 404, { error: 'No encontrado' });
   try {
     const cuerpo = await readFile(archivo);
-    res.writeHead(200, { 'Content-Type': TIPOS[extname(archivo)] || 'application/octet-stream', 'Cache-Control': ruta === '/index.html' ? 'no-cache' : 'public, max-age=300' });
+    res.writeHead(200, { 'Content-Type': TIPOS[extname(archivo)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(cuerpo);
   } catch { json(res, 404, { error: 'No encontrado' }); }
 }
