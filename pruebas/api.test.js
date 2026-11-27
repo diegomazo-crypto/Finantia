@@ -65,7 +65,8 @@ describe('Servidor', () => {
 
   test('el perfil dice qué puede hacer cada rol', async () => {
     const adm = await ok(pedir('POST', '/api/ingreso', { como: U.adm, cuerpo: {} }));
-    assert.deepEqual(adm.modulos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: true }]);
+    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PRESUPUESTO'), { modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: true });
+    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PLANEACION'), { modulo: 'PLANEACION', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: false });
     assert.deepEqual(adm.admin, { ver: false, editar: false });
     const su = await ok(pedir('GET', '/api/yo', { como: U.su }));
     assert.equal(su.superusuario, true);
@@ -208,6 +209,31 @@ describe('Motor en el navegador y datos base', () => {
     assert.equal(datos.DD, undefined); assert.equal(datos.CCN, undefined); assert.equal(datos.CTN, undefined);
     const conAux = await ok(pedir('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`, { como: U.adm }));
     assert.ok(conAux.DD && conAux.CCN.length && conAux.CTN.length);
+  });
+
+  test('planeación financiera: flujo de caja de la versión del presupuesto, solo con acceso al módulo', async () => {
+    const d = await ok(pedir('GET', '/api/planeacion/flujo', { como: U.con }));
+    assert.equal(d.ejercicio, 2027);
+    assert.ok(d.versiones.length >= 1 && d.version);
+    for (const e of ['Pesimista', 'Moderado', 'Optimista']) {
+      const r = d.version.resultados[e];
+      assert.equal(r.mensual.length, 12); assert.equal(r.caja.meses.length, 12);
+      assert.ok(['REC', 'NOM', 'PRI', 'CES', 'PROV', 'CAP', 'SF'].every(k => k in r.caja.meses[0]));
+      assert.equal(r.supuestos, undefined);
+    }
+    assert.equal(d.version.supuestos, undefined);
+    const v1 = d.versiones[0].id;
+    assert.equal((await ok(pedir('GET', `/api/planeacion/flujo?ejercicio=2027&version=${v1}`, { como: U.con }))).version.id, v1);
+    assert.equal((await pedir('GET', '/api/planeacion/flujo?ejercicio=2031', { como: U.con })).status, 404);
+    assert.equal((await pedir('GET', '/api/planeacion/flujo')).status, 401);
+    const yo = await ok(pedir('GET', '/api/yo', { como: U.con }));
+    assert.ok(yo.modulos.some(m => m.modulo === 'PLANEACION'));
+    // sin acceso a Planeación: 403
+    const su = await ok(pedir('GET', '/api/admin/usuarios', { como: U.su }));
+    const con = su.find(u => u.correo === U.con);
+    await ok(pedir('DELETE', `/api/admin/usuarios/${con.id}/accesos/PLANEACION`, { como: U.su }));
+    assert.equal((await pedir('GET', '/api/planeacion/flujo', { como: U.con })).status, 403);
+    await ok(pedir('PUT', `/api/admin/usuarios/${con.id}/accesos/PLANEACION`, { como: U.su, cuerpo: { rol: 'VISUALIZACION' } }));
   });
 
   test('metas por intake: valida unidad y cantidad de intakes', async () => {

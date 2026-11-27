@@ -6,7 +6,12 @@ import * as P from '../presupuesto/servicio.js';
 
 export async function sembrarDemo(db) {
   const su = await cargarActor(db, await A.inicializarSuperusuario(db, { correo: 'superusuario@demo.finantia', nombre: 'Superusuario (demo)' }, []));
-  const crea = async (correo, nombre, rol, detalleSensible = false) => { const id = await A.crearUsuario(db, su, { correo, nombre }, []); await A.asignarAcceso(db, su, id, 'PRESUPUESTO', rol, { detalleSensible }); return id; };
+  const crea = async (correo, nombre, rol, detalleSensible = false) => {
+    const id = await A.crearUsuario(db, su, { correo, nombre }, []);
+    await A.asignarAcceso(db, su, id, 'PRESUPUESTO', rol, { detalleSensible });
+    await A.asignarAcceso(db, su, id, 'PLANEACION', rol);
+    return id;
+  };
   const adm = await cargarActor(db, await crea('administracion@demo.finantia', 'Equipo financiero (demo)', 'ADMINISTRACION', true));
   await crea('aprobacion@demo.finantia', 'Aprobador (demo)', 'APROBACION');
   await crea('consulta@demo.finantia', 'Consulta (demo)', 'VISUALIZACION');

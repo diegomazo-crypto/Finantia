@@ -74,3 +74,14 @@ export const nfMil = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }
 /** Pone el ancho (y la posición) de las barras después de pintar: la CSP no permite estilos en línea en el HTML. */
 export function anchos(raiz) { raiz.querySelectorAll('[data-w]').forEach(el => { el.style.width = el.dataset.w + '%'; el.style.left = (el.dataset.l || 0) + '%'; }); }
 
+
+/* Estructura del estado de resultados (misma de Finantia 1.0) */
+export const EERR = [
+  ['IB', 'Ingreso bruto', 'sub'], ['DS', 'Descuentos y becas', 'det', -1], ['NET', 'Ingreso neto', 'sub'],
+  ['PRESTACION', 'Costo de prestación', 'det'], ['ADM_ACADEMICA', 'Administración académica', 'det'], ['UNIDADES', 'Unidades de negocio', 'det'], ['VENTAS', 'Ventas y mercadeo', 'det'],
+  ['CD', 'Costos directos', 'sub'], ['MB', 'Margen bruto', 'sub'],
+  ['TECNOLOGIA', 'Tecnología', 'det'], ['CORPORATIVO', 'Corporativo', 'det'], ['ADMINISTRATIVOS', 'Administrativos', 'det'], ['DIRECCION', 'Dirección', 'det'],
+  ['GO', 'Gastos de operación', 'sub'], ['RO', 'Resultado operacional', 'sub'],
+  ['OTROS_INGRESOS', 'Otros ingresos', 'det'], ['BANCARIOS', 'Gastos bancarios', 'det', -1], ['DA', 'Depreciación y amortización', 'det', -1], ['OTROS_GASTOS', 'Otros gastos', 'det', -1],
+  ['RN', 'Resultado neto', 'total'], ['EBITDA', 'EBITDA', 'sub']
+];

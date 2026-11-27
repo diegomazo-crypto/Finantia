@@ -33,6 +33,7 @@ app = cambiar(app, "  if (recargar) location.replace('/#/');\n  location.reload(
   "  /* En la demostración los datos viven en la página: salir no recarga, para no perderlos. */\n  if (window.FINANTIA_DEMO) { sesion.correo = null; sesion.perfil = null; window.removeEventListener('hashchange', enrutar); history.replaceState(null, '', '#/'); return pantallaIngreso(); }\n  if (recargar) location.replace('/#/');\n  location.reload();", 'app.js');
 escribir('app.js', app);
 copiar('web/sensible.js', 'sensible.js');
+copiar('web/planeacion.js', 'planeacion.js');
 copiar('web/marca/finantia.png', 'marca/finantia.png');
 escribir('estilos.css', leer('web/estilos.css') + `
 /* Demostración */
@@ -46,6 +47,7 @@ copiar('servidor/errores.js');
 copiar('servidor/admin/permisos.js');
 copiar('servidor/admin/bitacora.js');
 copiar('servidor/presupuesto/evaluacion.js');
+copiar('servidor/planeacion/servicio.js');
 let servicio = leer('servidor/presupuesto/servicio.js');
 servicio = cambiar(servicio, "import { createHash } from 'node:crypto';\n", "const createHash = () => { throw new Error('no disponible en la demostración'); };\n", 'servicio.js');
 servicio = cambiar(servicio, "import { readFileSync } from 'node:fs';\n", '', 'servicio.js');

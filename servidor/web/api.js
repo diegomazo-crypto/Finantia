@@ -4,6 +4,7 @@ import { puede, veDetalleSensible } from '../admin/permisos.js';
 import * as P from '../presupuesto/servicio.js';
 import * as AR from '../presupuesto/archivos.js';
 import * as EV from '../presupuesto/evaluacion.js';
+import * as PL from '../planeacion/servicio.js';
 import { TAMANO_MAXIMO as NOMINA_MAX } from '../presupuesto/nomina.js';
 import { falla, DATOS_INVALIDOS } from '../errores.js';
 import { DEFAULTS } from '../../motor/parametros.js';
@@ -89,6 +90,11 @@ export function rutasApi(db, auth, asistente, nomina) {
     /* Evaluación del presupuesto del equipo (solo 2027; requiere el detalle sensible) */
     ruta('GET', '/api/presupuesto/ejercicios/:anio/evaluacion', async ({ actor, params }) => ({ evaluacion: await EV.obtenerEvaluacion(db, actor, entero(params.anio)) })),
     ruta('PUT', '/api/presupuesto/ejercicios/:anio/evaluacion', ({ actor, params, body }) => EV.cargarEvaluacion(db, actor, entero(params.anio), body)),
+
+    /* Planeación financiera */
+    ruta('GET', '/api/planeacion/flujo', ({ actor, query }) => PL.flujoDeCaja(db, actor, {
+      ejercicio: query.ejercicio ? entero(query.ejercicio) : null, versionId: query.version ? entero(query.version) : null
+    })),
 
     /* Preguntas al asistente */
     ruta('GET', '/api/presupuesto/versiones/:id/preguntas', async ({ actor, params }) => ({ activo: asistente.activo, preguntas: await asistente.historial(db, actor, entero(params.id)) })),

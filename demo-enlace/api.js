@@ -12,6 +12,7 @@ import { puede, veDetalleSensible, ROLES } from '../servidor/admin/permisos.js';
 import { ErrorFinantia } from '../servidor/errores.js';
 import { validarSupuestos, sinAuxiliar } from '../servidor/presupuesto/servicio.js';
 import { interpretarNomina } from '../servidor/presupuesto/nomina.js';
+import { versionPorDefecto, soloFlujo } from '../servidor/planeacion/servicio.js';
 import { validarEvaluacion, EJERCICIOS as EJ_EVALUACION } from '../servidor/presupuesto/evaluacion.js';
 
 const HTTP = { SIN_SESION: 401, NO_AUTORIZADO: 403, NO_ENCONTRADO: 404, ESTADO_INVALIDO: 409, DATOS_INVALIDOS: 422, NO_DISPONIBLE: 503 };
@@ -32,9 +33,9 @@ const MODULOS = [['ADMINISTRACION', 'Administración', true], ['PRESUPUESTO', 'P
 const S = {
   usuarios: [
     { id: 1, correo: 'superusuario@demo.finantia', nombre: 'Superusuario (demo)', activo: true, es_superusuario: true, ultimo_ingreso: null, accesos: {} },
-    { id: 2, correo: 'administracion@demo.finantia', nombre: 'Equipo financiero (demo)', activo: true, es_superusuario: false, ultimo_ingreso: null, accesos: { PRESUPUESTO: { modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', detalle_sensible: true } } },
-    { id: 3, correo: 'aprobacion@demo.finantia', nombre: 'Aprobador (demo)', activo: true, es_superusuario: false, ultimo_ingreso: null, accesos: { PRESUPUESTO: { modulo: 'PRESUPUESTO', rol: 'APROBACION', detalle_sensible: false } } },
-    { id: 4, correo: 'consulta@demo.finantia', nombre: 'Consulta (demo)', activo: true, es_superusuario: false, ultimo_ingreso: null, accesos: { PRESUPUESTO: { modulo: 'PRESUPUESTO', rol: 'VISUALIZACION', detalle_sensible: false } } }
+    { id: 2, correo: 'administracion@demo.finantia', nombre: 'Equipo financiero (demo)', activo: true, es_superusuario: false, ultimo_ingreso: null, accesos: { PRESUPUESTO: { modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', detalle_sensible: true }, PLANEACION: { modulo: 'PLANEACION', rol: 'ADMINISTRACION', detalle_sensible: false } } },
+    { id: 3, correo: 'aprobacion@demo.finantia', nombre: 'Aprobador (demo)', activo: true, es_superusuario: false, ultimo_ingreso: null, accesos: { PRESUPUESTO: { modulo: 'PRESUPUESTO', rol: 'APROBACION', detalle_sensible: false }, PLANEACION: { modulo: 'PLANEACION', rol: 'APROBACION', detalle_sensible: false } } },
+    { id: 4, correo: 'consulta@demo.finantia', nombre: 'Consulta (demo)', activo: true, es_superusuario: false, ultimo_ingreso: null, accesos: { PRESUPUESTO: { modulo: 'PRESUPUESTO', rol: 'VISUALIZACION', detalle_sensible: false }, PLANEACION: { modulo: 'PLANEACION', rol: 'VISUALIZACION', detalle_sensible: false } } }
   ],
   aprob: { modulo: 'PRESUPUESTO', aprobaciones_requeridas: 1, en_orden: false, actualizado_en: ahora(), aprobadores: [] },
   ejercicios: [], versiones: [], decisiones: [], bitacora: [], archivos: [], nomina: [], evaluacion: {},
@@ -163,6 +164,18 @@ ruta('POST', '/api/presupuesto/versiones', ({ a, b }) => {
   exigir(a, 'PRESUPUESTO', 'editar');
   validarSupuestos(b.supuestos || {});
   return { id: nuevaVersion(a.id, { ejercicio: entero(b.ejercicio), nombre: String(b.nombre || '').trim() || 'Versión sin nombre', copiaDe: b.copiaDe ? entero(b.copiaDe) : null, supuestos: b.supuestos || {} }) };
+});
+ruta('GET', '/api/planeacion/flujo', ({ a, q }) => {
+  exigir(a, 'PLANEACION', 'ver');
+  const anios = S.ejercicios.map(e => e.anio).sort((x, y) => y - x);
+  const anio = q.ejercicio ? entero(q.ejercicio) : anios[0] ?? null;
+  if (anio == null) return { ejercicios: [], ejercicio: null, versiones: [], version: null };
+  if (!anios.includes(anio)) falla('NO_ENCONTRADO', `No existe el ejercicio ${anio}`);
+  const versiones = S.versiones.filter(v => v.ejercicio === anio).map(({ id, numero, nombre, estado, escenario_oficial, aprobada_en }) => ({ id, numero, nombre, estado, escenario_oficial, aprobada_en }));
+  const v = q.version ? versiones.find(x => x.id === entero(q.version)) : versionPorDefecto(versiones);
+  if (q.version && !v) falla('NO_ENCONTRADO', `La versión ${q.version} no es del ejercicio ${anio}`);
+  if (!v) return { ejercicios: anios, ejercicio: anio, versiones, version: null };
+  return { ejercicios: anios, ejercicio: anio, versiones, version: { ...v, ejercicio: anio, resultados: soloFlujo(versionDe(v.id).resultados) } };
 });
 ruta('GET', '/api/presupuesto/versiones/:id', ({ a, p }) => { exigir(a, 'PRESUPUESTO', 'ver'); return { ...vista(versionDe(entero(p.id))), base: S.base, porDefecto: DEFAULTS }; });
 ruta('PATCH', '/api/presupuesto/versiones/:id/supuestos', ({ a, p, b }) => {
