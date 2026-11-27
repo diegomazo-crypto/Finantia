@@ -77,9 +77,12 @@ describe('Lectura del archivo de nómina', () => {
     assert.equal(f[0].costoAnual, 1500000000.5);
   });
 
-  test('rechaza nombres o documentos de personas, rubros desconocidos y columnas faltantes', () => {
-    assert.throws(() => interpretarNomina('rubro;proceso;cargo;Nombre;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;Pérez;1;0;0;1;1'), /quite nombres, documentos y correos/);
-    assert.throws(() => interpretarNomina('rubro;proceso;cargo;cédula;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;1;1;0;0;1;1'), /quite nombres/);
+  test('acepta nombre y cédula de cada persona e ignora correos; rechaza rubros desconocidos y columnas faltantes', () => {
+    const [f] = interpretarNomina('rubro;proceso;cargo;Cédula;Nombres;Apellidos;Correo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;1.017.123.456;Ana María;Pérez Gómez;ana@x.co;1;0;0;1;1');
+    assert.equal(f.cedula, '1017123456');
+    assert.equal(f.nombre, 'Ana María Pérez Gómez');
+    assert.ok(!JSON.stringify(f).includes('ana@x.co'), 'el correo no se guarda');
+    assert.throws(() => interpretarNomina('rubro;proceso;cargo;cedula;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;<script>;1;0;0;1;1'), /cédula inválida/);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n5.1;A;B;1;0;0;1;1'), /Fila 2: rubro "5.1" desconocido/);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo\n4.1;A;B'), /Faltan columnas: continuan/);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;-1;0;0;1;1'), /Fila 2: valor inválido en continuan/);
@@ -129,13 +132,10 @@ describe('Nómina por cargo por la API', () => {
     assert.match(r.datos.error, /descifrar/);
   });
 
-  test('rechaza otro formato, columnas de personas y archivos que no son UTF-8', async () => {
+  test('rechaza otro formato y archivos que no son UTF-8', async () => {
     assert.equal((await subir(U.adm, CSV, 'nomina.xlsx')).status, 422, 'un CSV con extensión .xlsx');
     assert.equal((await subir(U.adm, XLSX, 'nomina.csv')).status, 422, 'un Excel con extensión .csv');
     assert.equal((await subir(U.adm, CSV, 'nomina.pdf')).status, 422);
-    const p = await subir(U.adm, 'rubro;proceso;cargo;nombres;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;X;1;0;0;1;1');
-    assert.equal(p.status, 422);
-    assert.match(p.datos.error, /quite nombres/);
     const latin1 = await pedir(base, 'POST', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm, crudo: Buffer.from('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;Dirección;B;1;0;0;1;1', 'latin1'), nombre: 'n.csv' });
     assert.equal(latin1.status, 422);
     assert.match(latin1.datos.error, /UTF-8/);
@@ -215,8 +215,9 @@ describe('Nómina en Excel (.xlsx)', () => {
     assert.equal(f[0].costoAnual, 3200000000);
   });
 
-  test('rechaza columnas de personas, fórmulas sin valor y archivos que no son Excel', async () => {
-    await assert.rejects(async () => interpretarNomina(await leerXlsx(await aXlsx([['rubro', 'proceso', 'cargo', 'Cédula', 'continuan', 'nuevos', 'vacantes', 'salario_2027', 'costo_anual'], ['4.1', 'A', 'B', 123, 1, 0, 0, 1, 1]]), inflar)), /quite nombres/);
+  test('acepta nombre y cédula; rechaza fórmulas sin valor y archivos que no son Excel', async () => {
+    const [p] = interpretarNomina(await leerXlsx(await aXlsx([['rubro', 'proceso', 'cargo', 'Cédula', 'Nombre', 'continuan', 'nuevos', 'vacantes', 'salario_2027', 'costo_anual'], ['4.1', 'A', 'B', 71234567, 'Juan Ejemplo', 1, 0, 0, 1, 1]]), inflar));
+    assert.deepEqual([p.cedula, p.nombre], ['71234567', 'Juan Ejemplo'], 'la cédula numérica de Excel se lee sin decimales');
     await assert.rejects(leerXlsx(readFileSync(new URL('./referencias/nomina_formula_sin_valor.xlsx', import.meta.url)), inflar), /fórmula sin valor/);
     await assert.rejects(leerXlsx(Buffer.from('no soy un zip'), inflar), /no es un .xlsx/);
     await assert.rejects(leerXlsx(XLSX.subarray(0, 1000), inflar), /no se pudo leer/);
@@ -230,5 +231,15 @@ describe('Nómina en Excel (.xlsx)', () => {
     assert.equal(v.filas.length, 4);
     const r = (await db.query('SELECT cifrado FROM nomina_carga WHERE id = $1', [id])).rows[0];
     assert.ok(!Buffer.from(r.cifrado).toString('latin1').includes('Profesor'));
+  });
+
+  test('nombre y cédula quedan cifrados: no aparecen en la base sin descifrar ni en la bitácora', async () => {
+    const libro = await aXlsx([['rubro', 'proceso', 'cargo', 'cedula', 'nombre', 'continuan', 'nuevos', 'vacantes', 'salario_2027', 'costo_anual'], ['6.3', 'Contabilidad', 'Analista', 98765432, 'Persona De Prueba', 1, 0, 0, 3000000, 45000000]]);
+    const { id } = await ok(subir(U.adm, libro, 'nomina_personas.xlsx'));
+    const v = await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm }));
+    assert.deepEqual([v.filas[0].cedula, v.filas[0].nombre], ['98765432', 'Persona De Prueba']);
+    assert.equal((await pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.con })).status, 403);
+    const todo = JSON.stringify((await db.query('SELECT * FROM nomina_carga WHERE id = $1', [id])).rows) + JSON.stringify((await db.query('SELECT * FROM bitacora')).rows);
+    assert.ok(!todo.includes('98765432') && !todo.includes('Persona De Prueba'));
   });
 });

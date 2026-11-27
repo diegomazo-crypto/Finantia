@@ -6,7 +6,9 @@
  *    sensible (lo asigna el Superusuario en Administración);
  *  - se guarda cifrada con AES-256-GCM. La llave de 32 bytes vive solo en el servidor
  *    (variable FINANTIA_LLAVE_NOMINA, en base64), nunca en la base ni en el repositorio;
- *  - el archivo no puede traer nombres, documentos ni correos de las personas: va por cargo;
+ *  - puede traer el nombre y la cédula de cada persona (decisión de Diego, 2026-11-27: se necesitan
+ *    para la auditoría contable). Van solo dentro del contenido cifrado, nunca en la bitácora;
+ *    correos y teléfonos se ignoran y no se guardan;
  *  - cada consulta queda en la bitácora; al retirar una carga se borra su contenido cifrado;
  *  - no se envía al asistente de Preguntas ni aparece en las versiones.
  */
@@ -38,10 +40,12 @@ const COLUMNAS = {
   vacantes: ['vacantes', 'vac'],
   salario2026: ['salario_2026', 'salario_mensual_2026'],
   salario2027: ['salario_2027', 'salario_mensual_2027'],
-  costoAnual: ['costo_anual', 'costo_anual_2027', 'costo']
+  costoAnual: ['costo_anual', 'costo_anual_2027', 'costo'],
+  cedula: ['cedula', 'documento', 'numero_de_documento', 'no_documento', 'identificacion', 'cc', 'nit'],
+  nombre: ['nombre', 'nombres', 'nombre_completo', 'empleado', 'nombre_del_empleado', 'apellidos_y_nombres', 'nombres_y_apellidos'],
+  apellidos: ['apellidos', 'apellido']
 };
 const OBLIGATORIAS = ['rubro', 'proceso', 'cargo', 'continuan', 'nuevos', 'vacantes', 'salario2027', 'costoAnual'];
-const PROHIBIDAS = /^(nombres?|apellidos?|nombre_completo|cedula|documento|numero_de_documento|identificacion|id_empleado|codigo_empleado|empleado|correo|email|telefono)$/;
 
 const normal = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
@@ -103,8 +107,6 @@ export function interpretarNomina(entrada) {
   const filas = Array.isArray(entrada) ? entrada : leerCsv(entrada);
   if (filas.length < 2) falla(DATOS_INVALIDOS, 'El archivo no tiene filas de nómina');
   const enc = filas[0].map(normal);
-  const prohibida = enc.find(h => PROHIBIDAS.test(h));
-  if (prohibida) falla(DATOS_INVALIDOS, `El archivo trae la columna "${filas[0][enc.indexOf(prohibida)].trim()}". La nómina se carga por cargo: quite nombres, documentos y correos de las personas.`);
   const col = {};
   for (const [k, alias] of Object.entries(COLUMNAS)) { const i = enc.findIndex(h => alias.includes(h)); if (i >= 0) col[k] = i; }
   const faltan = OBLIGATORIAS.filter(k => col[k] == null);
@@ -122,7 +124,15 @@ export function interpretarNomina(entrada) {
       if (!Number.isFinite(x) || x < 0) falla(DATOS_INVALIDOS, `Fila ${r}: valor inválido en ${COLUMNAS[k][0]} ("${val(k)}")`);
       n[k] = x;
     }
-    return { rubro, proceso, cargo, ...n };
+    const persona = {};
+    if (col.cedula != null) {
+      const ced = String(val('cedula')).replace(/[.\s]/g, '').trim();
+      if (ced && !/^[0-9A-Za-z-]{3,20}$/.test(ced)) falla(DATOS_INVALIDOS, `Fila ${r}: cédula inválida ("${val('cedula')}")`);
+      if (ced) persona.cedula = ced;
+    }
+    const nom = [val('nombre'), val('apellidos')].map(x => String(x).trim()).filter(Boolean).join(' ').slice(0, 160);
+    if (nom) persona.nombre = nom;
+    return { rubro, proceso, cargo, ...n, ...persona };
   });
 }
 
