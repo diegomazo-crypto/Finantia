@@ -1,6 +1,6 @@
 /* Finantia 2.0 · pantallas (JavaScript sin dependencias). Rutas con #/… */
 
-import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos } from './analisis.js';
+import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos, detalleLineas } from './analisis.js';
 import { vNomina, vEvaluacion } from './sensible.js';
 import { $, ACCIONES, ESCS, ESTADOS, M, MESES, Mn, P, ROLES, accion, almacen, anchos, api, app, aviso, cls, esc, fecha, ganchos, kpi, modulo, nf0, nf1, sesion } from './comun.js';
 
@@ -193,14 +193,68 @@ const EERR = [
   ['RN', 'Resultado neto', 'total'], ['EBITDA', 'EBITDA', 'sub']
 ];
 
-function vResumen(c, v) {
-  const b = v.base.eerr2026, R = v.resultados;
-  c.innerHTML = `<div class="tarjeta"><h2>Estado de resultados ${v.ejercicio} · tres escenarios frente a 2026E</h2>
-    <p class="nota">Millones de pesos. La variación es la del escenario Moderado frente a 2026E.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Rubro</th><th>2026E</th>${ESCS.map(e => `<th>${e}</th>`).join('')}<th>Var. Mod.</th></tr></thead><tbody>
+/* ---------- Drill down del estado de resultados ----------
+   Cada renglón se abre por unidad o por línea del presupuesto (las líneas de Base2026), y el
+   segundo nivel cruza la otra dimensión: rubro → unidad → línea, o rubro → línea → unidad.
+   Los subtotales (ingreso neto, márgenes, resultados) se abren por unidad. */
+const DIMS = [['linea', 'Línea del presupuesto'], ['unidad', 'Unidad']];
+/** Líneas de un rubro de detalle (no aplica a ingreso bruto ni descuentos, que son una sola línea). */
+const lineasDe = (D, k, tipo) => !D || tipo !== 'det' || k === 'DS' ? [] : D.L.map(([b], li) => b === k ? li : -1).filter(li => li >= 0);
+const hayValor = xs => xs.some(x => Math.round((x || 0) / 1e6) !== 0);
+const botonAbrir = (id, t) => `<button type="button" class="enlace" data-abrir="${id}" aria-expanded="false">▸ ${t}</button>`;
+const marcar = (b, a) => { b.setAttribute('aria-expanded', String(a)); b.textContent = (a ? '▾ ' : '▸ ') + b.textContent.slice(2); };
+/** Abre y cierra las filas de un árbol: al cerrar un renglón se cierran también sus hijos. */
+function arbol(tabla) {
+  const cerrar = id => tabla.querySelectorAll(`tr[data-de="${id}"]`).forEach(tr => {
+    tr.hidden = true; const h = tr.querySelector('[data-abrir]'); if (h && h.getAttribute('aria-expanded') === 'true') { marcar(h, false); cerrar(h.dataset.abrir); }
+  });
+  tabla.addEventListener('click', e => {
+    const b = e.target.closest('[data-abrir]'); if (!b) return;
+    const abrir = b.getAttribute('aria-expanded') !== 'true';
+    marcar(b, abrir);
+    if (abrir) tabla.querySelectorAll(`tr[data-de="${b.dataset.abrir}"]`).forEach(tr => { tr.hidden = false; }); else cerrar(b.dataset.abrir);
+  });
+  return () => tabla.querySelectorAll('[data-abrir][aria-expanded="true"]').forEach(b => { if (!b.closest('tr[data-de]')) { marcar(b, false); cerrar(b.dataset.abrir); } });
+}
+async function detalleSeguro(v) { try { return await detalleLineas(v); } catch { return null; } }
+
+async function vResumen(c, v) {
+  const b = v.base.eerr2026, R = v.resultados, BU = v.base.eerr2026Unidades, n = v.base.names;
+  const D = await detalleSeguro(v);
+  const dim0 = almacen.leer('finantia.drill');
+  const dim = D && dim0 !== 'unidad' ? 'linea' : 'unidad';
+  const celdas = xs => xs.map(x => `<td class="${cls(x)}">${Mn(x)}</td>`).join('') + `<td>${P(xs[0] ? xs[2] / xs[0] - 1 : null)}</td>`;
+  const fila = (id, de, nivel, t, xs, hijos) => hijos ? `<tr class="hijo n${nivel}" data-de="${de}" hidden><td>${botonAbrir(id, esc(t))}</td>${celdas(xs)}</tr>${hijos}` : `<tr class="hijo n${nivel}" data-de="${de}" hidden><td>${esc(t)}</td>${celdas(xs)}</tr>`;
+  const vUni = (k, i) => [BU[i][k], ...ESCS.map(e => R[e].eerrUnidades[i][k])];
+  const vLin = li => [D.g26.tot.ln[li], ...ESCS.map(e => D.esc[e].tot.ln[li])];
+  const vLinUni = (li, i) => [D.g26.units[i].ln[li], ...ESCS.map(e => D.esc[e].units[i].ln[li])];
+  const porMod = (a, z) => Math.abs(z.xs[2]) - Math.abs(a.xs[2]);
+  function hijosDe(k, tipo) {
+    const lin = lineasDe(D, k, tipo), uni = n.map((_, i) => i);
+    if (dim === 'linea' && lin.length) {
+      return lin.map(li => ({ li, xs: vLin(li) })).filter(x => hayValor(x.xs)).sort(porMod).map(({ li, xs }) => {
+        const id = `${k}-l${li}`, sub = uni.map(i => ({ i, xs: vLinUni(li, i) })).filter(x => hayValor(x.xs));
+        return fila(id, k, 1, D.LN[li], xs, sub.length ? sub.map(x => fila(`${id}-u${x.i}`, id, 2, n[x.i], x.xs)).join('') : '');
+      }).join('');
+    }
+    return uni.map(i => ({ i, xs: vUni(k, i) })).filter(x => hayValor(x.xs)).map(({ i, xs }) => {
+      const id = `${k}-u${i}`, sub = lin.map(li => ({ li, xs: vLinUni(li, i) })).filter(x => hayValor(x.xs)).sort(porMod);
+      return fila(id, k, 1, n[i], xs, sub.length ? sub.map(x => fila(`${id}-l${x.li}`, id, 2, D.LN[x.li], x.xs)).join('') : '');
+    }).join('');
+  }
+  c.innerHTML = `${D && !D.cuadra ? '<p class="nota neg">El detalle por línea se calculó de nuevo en el navegador y no coincide del todo con lo guardado (el motor cambió). Edite y guarde un supuesto para recalcular la versión.</p>' : ''}
+    <div class="tarjeta"><h2>Estado de resultados ${v.ejercicio} · tres escenarios frente a 2026E</h2>
+    <p class="nota">Millones de pesos. La variación es la del escenario Moderado frente a 2026E. Toque un renglón para abrir su detalle${D ? '; dentro de cada línea o unidad se abre la otra dimensión' : ''}.</p>
+    <div class="acciones fila-drill" role="group" aria-label="Abrir los renglones por">
+      <span class="nota">Abrir por</span>
+      ${DIMS.map(([d, t]) => `<button type="button" class="btn ${d === dim ? 'primario' : ''}" data-dim="${d}" aria-pressed="${d === dim}" ${!D && d === 'linea' ? 'disabled' : ''}>${t}</button>`).join('')}
+      <button type="button" class="btn" id="cerrar-todo">Cerrar todo</button>
+    </div>
+    ${D ? '' : '<p class="nota">El detalle por línea no está disponible en este momento; se muestra por unidad.</p>'}
+    <div class="tabla-cont"><table id="t-eerr"><thead><tr><th>Rubro</th><th>2026E</th>${ESCS.map(e => `<th>${e}</th>`).join('')}<th>Var. Mod.</th></tr></thead><tbody>
     ${EERR.map(([k, t, tipo]) => {
-      const m = R.Moderado.eerr[k], var_ = b[k] ? m / b[k] - 1 : null;
-      return `<tr class="${tipo}"><td>${t}</td><td class="${cls(b[k])}">${Mn(b[k])}</td>${ESCS.map(e => `<td class="${cls(R[e].eerr[k])}">${Mn(R[e].eerr[k])}</td>`).join('')}<td>${P(var_)}</td></tr>`;
+      const m = R.Moderado.eerr[k], var_ = b[k] ? m / b[k] - 1 : null, hijos = hijosDe(k, tipo);
+      return `<tr class="${tipo}"><td>${hijos ? botonAbrir(k, t) : t}</td><td class="${cls(b[k])}">${Mn(b[k])}</td>${ESCS.map(e => `<td class="${cls(R[e].eerr[k])}">${Mn(R[e].eerr[k])}</td>`).join('')}<td>${P(var_)}</td></tr>${hijos}`;
     }).join('')}
     <tr><td>Margen EBITDA</td><td>${P(b.EBITDA / b.NET)}</td>${ESCS.map(e => `<td>${P(R[e].eerr.EBITDA / R[e].eerr.NET)}</td>`).join('')}<td></td></tr>
     </tbody></table></div></div>
@@ -208,14 +262,21 @@ function vResumen(c, v) {
     <div class="tabla-cont"><table><thead><tr><th>Rubro</th><th>Nómina 2026E</th><th>Nómina ${v.ejercicio}</th><th>% del rubro ${v.ejercicio}</th></tr></thead><tbody>
     ${EERR.filter(x => x[2] === 'det' && v.resultados.Moderado.eerr['n_' + x[0]]).map(([k, t]) => { const e = v.resultados.Moderado.eerr; return `<tr><td>${t}</td><td>${Mn(b['n_' + k])}</td><td>${Mn(e['n_' + k])}</td><td>${P(e['n_' + k] / e[k])}</td></tr>`; }).join('')}
     </tbody></table></div></div>`;
+  const cerrarTodo = arbol($('#t-eerr'));
+  $('#cerrar-todo').onclick = cerrarTodo;
+  c.querySelectorAll('[data-dim]').forEach(x => x.onclick = () => { almacen.poner('finantia.drill', x.dataset.dim); vResumen(c, v); });
 }
 
-function vUnidades(c, v, escenario) {
+async function vUnidades(c, v, escenario) {
   const r = v.resultados[escenario], U = r.eerrUnidades, B = v.base.eerr2026Unidades, n = v.base.names;
+  const D = await detalleSeguro(v), G = D?.esc[escenario];
   const max = Math.max(...U.map(u => Math.abs(u.EBITDA)), 1);
-  c.innerHTML = `<div class="tarjeta"><h2>Estado de resultados por unidad · ${escenario}</h2><p class="nota">Millones de pesos.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Rubro</th>${n.map(x => `<th>${esc(x)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
-    ${EERR.map(([k, t, tipo]) => `<tr class="${tipo}"><td>${t}</td>${U.map(u => `<td class="${cls(u[k])}">${Mn(u[k])}</td>`).join('')}<td class="${cls(r.eerr[k])}">${Mn(r.eerr[k])}</td></tr>`).join('')}
+  const lineas = (k, tipo) => lineasDe(D, k, tipo).map(li => ({ li, xs: [...G.units.map(u => u.ln[li]), G.tot.ln[li]] })).filter(x => hayValor(x.xs))
+    .sort((a, z) => Math.abs(z.xs[7]) - Math.abs(a.xs[7]))
+    .map(({ li, xs }) => `<tr class="hijo n1" data-de="${k}" hidden><td>${esc(D.LN[li])}</td>${xs.map(x => `<td class="${cls(x)}">${Mn(x)}</td>`).join('')}</tr>`).join('');
+  c.innerHTML = `<div class="tarjeta"><h2>Estado de resultados por unidad · ${escenario}</h2><p class="nota">Millones de pesos.${D ? ' Toque un rubro para ver sus líneas del presupuesto en cada unidad.' : ''}</p>
+    <div class="tabla-cont"><table id="t-unidades"><thead><tr><th>Rubro</th>${n.map(x => `<th>${esc(x)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+    ${EERR.map(([k, t, tipo]) => { const h = lineas(k, tipo); return `<tr class="${tipo}"><td>${h ? botonAbrir(k, t) : t}</td>${U.map(u => `<td class="${cls(u[k])}">${Mn(u[k])}</td>`).join('')}<td class="${cls(r.eerr[k])}">${Mn(r.eerr[k])}</td></tr>${h}`; }).join('')}
     <tr><td>Margen EBITDA</td>${U.map(u => `<td>${P(u.NET ? u.EBITDA / u.NET : null)}</td>`).join('')}<td>${P(r.eerr.EBITDA / r.eerr.NET)}</td></tr>
     </tbody></table></div></div>
     <div class="rejilla">
@@ -225,6 +286,7 @@ function vUnidades(c, v, escenario) {
     <div class="tarjeta"><h3>Ingreso neto frente a 2026E</h3><div class="tabla-cont"><table><thead><tr><th>Unidad</th><th>2026E</th><th>${v.ejercicio}</th><th>Var.</th></tr></thead><tbody>
       ${U.map((u, i) => `<tr><td>${esc(n[i])}</td><td>${Mn(B[i].IB - B[i].DS)}</td><td>${Mn(u.NET)}</td><td>${P((B[i].IB - B[i].DS) ? u.NET / (B[i].IB - B[i].DS) - 1 : null)}</td></tr>`).join('')}
     </tbody></table></div></div></div>`;
+  arbol($('#t-unidades'));
 }
 
 function vMensual(c, v, escenario) {

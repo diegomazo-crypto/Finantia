@@ -28,14 +28,14 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 |---|---|
 | Presupuesto › Ejercicios | Ejercicios abiertos, sus versiones y su estado; crear una versión desde cero o como copia de otra |
 | Presupuesto › Archivos | Soportes del ejercicio (Excel, CSV, PDF…, hasta 15 MB): subir, descargar y retirar; quedan en la bitácora |
-| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro |
+| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro. Drill down: cada renglón se abre por línea del presupuesto o por unidad, y dentro de cada una la otra dimensión |
 | Versión › Ingresos | Puente del ingreso por unidad y por escenario, metas de nuevos por intake (editables), maestrías por cohortes y Barranquilla |
 | Versión › Costo de prestación | Costo por unidad, Vértice frente a tradicional, topes por grupo (editables) y programación académica optimizada (se aplica al escenario) |
 | Versión › Sensibilidad | Tornado, punto de equilibrio y metas inversas, tablas volumen × descuento y volumen × SMMLV |
 | Versión › Nómina por cargo | Solo con el detalle sensible. Nómina por rubro, proceso y cargo cargada en CSV, cifrada en la base; comparada con la nómina del modelo por rubro |
 | Versión › Evaluación del equipo | Solo ejercicio 2027 y con el detalle sensible. Presupuesto del equipo frente a la versión (rubros y unidades), partidas por proceso, observaciones y conclusiones |
 | Versión › Preguntas | Preguntas a Claude sobre la versión; se guardan para el equipo. Se activa con `ANTHROPIC_API_KEY` en el servidor |
-| Versión › Por unidad | Estado de resultados de las siete unidades, EBITDA por unidad e ingreso neto frente a 2026E |
+| Versión › Por unidad | Estado de resultados de las siete unidades (cada rubro se abre en sus líneas del presupuesto), EBITDA por unidad e ingreso neto frente a 2026E |
 | Versión › Mensual y caja | Resultado mes a mes y flujo de caja con el saldo mínimo |
 | Versión › Proyección y NPV | 2026E–2031, FCF, NPV al 12%, TIR y payback simple y descontado |
 | Versión › Supuestos | Supuestos por escenario y por unidad; editables solo en borrador y por el rol Administración |

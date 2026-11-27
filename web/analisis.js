@@ -21,6 +21,17 @@ async function modeloDe(v) {
   return { modelo, datos, H: datos.H, cuadra: dif < 1e6 };
 }
 
+/**
+ * Detalle del estado de resultados por línea presupuestal (Base2026) y unidad, para el drill down.
+ * g26 = 2026E; esc[e] = cada escenario. ln[li] es el total de la línea y units[i].ln[li] el de la unidad.
+ */
+export async function detalleLineas(v) {
+  const { modelo, datos, cuadra } = await modeloDe(v);
+  const g26 = modelo.pyg2026();
+  const escs = Object.fromEntries(ESCS.map(e => [e, modelo.escenario(e).pyg]));
+  return { L: datos.L, LN: datos.LN, g26, esc: escs, cuadra };
+}
+
 const editable = v => modulo('PRESUPUESTO').editar && v.estado === 'BORRADOR';
 const avisoCuadre = c => c ? '' : '<p class="nota neg">El cálculo de esta pantalla no coincide con el guardado de la versión (el motor cambió). Edite y guarde un supuesto para recalcularla.</p>';
 const guardar = async (v, cambios, ok, ctx) => {

@@ -153,3 +153,11 @@ dl.obs dt { font-weight: 600; margin-top: 12px }
 dl.obs dd { margin: 4px 0 0; max-width: 95ch; line-height: 1.5 }
 p.parrafo { max-width: 95ch; line-height: 1.5 }
 td.lectura, tr.total td.lectura, tr.sub td.lectura { font-weight: 400 }
+
+/* Drill down del estado de resultados */
+.fila-drill { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px }
+tr.hijo td { font-weight: 400; font-size: 12px; background: var(--surface) }
+tr.hijo td:first-child { color: var(--muted); white-space: normal; min-width: 220px }
+tr.hijo.n1 td:first-child { padding-left: 40px }
+tr.hijo.n2 td:first-child { padding-left: 64px }
+tr.hijo.n1 .enlace { color: var(--ink) }
