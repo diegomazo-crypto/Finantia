@@ -2,6 +2,7 @@
 import * as A from '../admin/admin.js';
 import { puede, veDetalleSensible } from '../admin/permisos.js';
 import * as P from '../presupuesto/servicio.js';
+import * as AR from '../presupuesto/archivos.js';
 import { falla, DATOS_INVALIDOS } from '../errores.js';
 import { DEFAULTS } from '../../motor/parametros.js';
 
@@ -18,7 +19,7 @@ function perfil(a) {
   return { id: a.id, nombre: a.nombre, correo: a.correo, superusuario: a.es_superusuario, modulos, admin };
 }
 
-export function rutasApi(db, auth) {
+export function rutasApi(db, auth, asistente) {
   const rutas = [
     ruta('GET', '/api/config', () => (auth.modo === 'entra' ? { modo: 'entra', tenant: auth.tenant, clientId: auth.clientId } : { modo: 'desarrollo' }), { publica: true }),
     ruta('POST', '/api/ingreso', ({ actor }) => perfil(actor), { registrarIngreso: true }),
@@ -60,7 +61,23 @@ export function rutasApi(db, auth) {
     ruta('POST', '/api/presupuesto/versiones/:id/aprobar', ({ actor, params, body }) => P.aprobar(db, actor, entero(params.id), { observaciones: body.observaciones || null, escenarioOficial: body.escenarioOficial || null })),
     ruta('POST', '/api/presupuesto/versiones/:id/devolver', ({ actor, params, body }) => P.devolver(db, actor, entero(params.id), body.observaciones)),
     ruta('GET', '/api/presupuesto/versiones/:id/lineas', ({ actor, params, query }) => P.lineasPresupuestales(db, actor, entero(params.id), { unidad: query.unidad || null, mes: query.mes ? entero(query.mes) : null })),
-    ruta('GET', '/api/presupuesto/versiones/:id/bitacora', ({ actor, params }) => P.historialVersion(db, actor, entero(params.id)))
+    ruta('GET', '/api/presupuesto/versiones/:id/bitacora', ({ actor, params }) => P.historialVersion(db, actor, entero(params.id))),
+    ruta('GET', '/api/presupuesto/datos-base/:id', ({ actor, params }) => P.contenidoDatosBase(db, actor, entero(params.id))),
+
+    /* Archivos del ejercicio */
+    ruta('GET', '/api/presupuesto/ejercicios/:anio/archivos', ({ actor, params }) => AR.listarArchivos(db, actor, entero(params.anio))),
+    ruta('POST', '/api/presupuesto/ejercicios/:anio/archivos', async ({ actor, params, body, headers }) => {
+      let nombre, descripcion;
+      try { nombre = decodeURIComponent(headers['x-nombre'] || ''); descripcion = headers['x-descripcion'] ? decodeURIComponent(headers['x-descripcion']) : null; }
+      catch { falla(DATOS_INVALIDOS, 'Nombre de archivo inválido'); }
+      return { id: await AR.subirArchivo(db, actor, entero(params.anio), { nombre, descripcion, contenido: body }) };
+    }, { crudo: AR.TAMANO_MAXIMO }),
+    ruta('GET', '/api/presupuesto/archivos/:id', async ({ actor, params }) => ({ descarga: await AR.descargarArchivo(db, actor, entero(params.id)) })),
+    ruta('DELETE', '/api/presupuesto/archivos/:id', ({ actor, params }) => AR.retirarArchivo(db, actor, entero(params.id))),
+
+    /* Preguntas al asistente */
+    ruta('GET', '/api/presupuesto/versiones/:id/preguntas', async ({ actor, params }) => ({ activo: asistente.activo, preguntas: await asistente.historial(db, actor, entero(params.id)) })),
+    ruta('POST', '/api/presupuesto/versiones/:id/preguntas', ({ actor, params, body }) => asistente.preguntar(db, actor, entero(params.id), { pregunta: body.pregunta, escenario: body.escenario || 'Moderado' }))
   ];
   if (auth.modo === 'desarrollo') rutas.push(ruta('GET', '/api/desarrollo/usuarios', async () =>
     (await db.query('SELECT correo, nombre, es_superusuario FROM usuario WHERE activo ORDER BY nombre')).rows, { publica: true }));

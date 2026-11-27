@@ -190,3 +190,106 @@ describe('Ingreso con Microsoft 365', () => {
     } finally { await new Promise(r => s2.close(r)); }
   });
 });
+
+describe('Motor en el navegador y datos base', () => {
+  test('sirve el motor y los datos base; el navegador calcula lo mismo que el servidor', async () => {
+    const js = await pedir('GET', '/motor/index.js');
+    assert.equal(js.status, 200);
+    assert.match(js.h.get('content-type'), /javascript/);
+    assert.equal((await pedir('GET', '/motor/../package.json')).status, 404);
+    assert.equal((await pedir('GET', '/motor/parametros.txt')).status, 404);
+    const v = await ok(pedir('GET', '/api/presupuesto/versiones/1', { como: U.con }));
+    const datos = await ok(pedir('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`, { como: U.con }));
+    const { crearModelo } = await import('../motor/index.js');
+    const m = crearModelo(datos, v.supuestos);
+    for (const e of ['Pesimista', 'Moderado', 'Optimista']) assert.ok(Math.abs(m.run(m.params[e]).tot.RN - v.resultados[e].tot.RN) < 1, e);
+    assert.equal((await pedir('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`)).status, 401);
+  });
+
+  test('metas por intake: valida unidad y cantidad de intakes', async () => {
+    const { id } = await ok(pedir('POST', '/api/presupuesto/versiones', { como: U.adm, cuerpo: { ejercicio: 2027, nombre: 'Metas' } }));
+    const patch = metas => pedir('PATCH', `/api/presupuesto/versiones/${id}/supuestos`, { como: U.adm, cuerpo: { metas } });
+    assert.equal((await patch({ 9: [1, 2] })).status, 422);
+    assert.equal((await patch({ 0: [1, 2] })).status, 422);
+    const antes = (await ok(pedir('GET', `/api/presupuesto/versiones/${id}`, { como: U.adm }))).resultados.Moderado.tot.IB;
+    await ok(patch({ 0: [800, 202, 248, 300, 169] }));
+    const v = await ok(pedir('GET', `/api/presupuesto/versiones/${id}`, { como: U.adm }));
+    assert.ok(v.resultados.Moderado.tot.IB > antes, 'más meta de nuevos, más ingreso');
+  });
+});
+
+describe('Archivos del ejercicio', () => {
+  const subir = (como, nombre, contenido, desc) => fetch(`${base}/api/presupuesto/ejercicios/2027/archivos`, {
+    method: 'POST', body: contenido,
+    headers: { 'X-Finantia': '1', 'X-Finantia-Correo': como, 'Content-Type': 'application/octet-stream', 'X-Nombre': encodeURIComponent(nombre), ...(desc ? { 'X-Descripcion': encodeURIComponent(desc) } : {}) }
+  });
+
+  test('subir, listar, descargar y retirar', async () => {
+    const r = await subir(U.adm, 'Matrículas 2026-2.csv', Buffer.from('programa,n\nA,1\n'), 'Matriculados por programa');
+    assert.equal(r.status, 200);
+    const { id } = await r.json();
+    const lista = await ok(pedir('GET', '/api/presupuesto/ejercicios/2027/archivos', { como: U.con }));
+    assert.equal(lista[0].nombre, 'Matrículas 2026-2.csv');
+    assert.equal(lista[0].descripcion, 'Matriculados por programa');
+    const d = await fetch(`${base}/api/presupuesto/archivos/${id}`, { headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.con } });
+    assert.equal(d.status, 200);
+    assert.match(d.headers.get('content-disposition'), /^attachment;/);
+    assert.equal(d.headers.get('content-type'), 'application/octet-stream');
+    assert.equal(await d.text(), 'programa,n\nA,1\n');
+    assert.equal((await pedir('DELETE', `/api/presupuesto/archivos/${id}`, { como: U.con })).status, 403, 'consulta no retira');
+    await ok(pedir('DELETE', `/api/presupuesto/archivos/${id}`, { como: U.adm }));
+    assert.equal((await ok(pedir('GET', '/api/presupuesto/ejercicios/2027/archivos', { como: U.con }))).length, 0);
+    assert.equal((await pedir('GET', `/api/presupuesto/archivos/${id}`, { como: U.con })).status, 404);
+    const bit = await ok(pedir('GET', '/api/admin/bitacora?modulo=PRESUPUESTO', { como: U.su }));
+    assert.ok(bit.some(b => b.accion === 'SUBIR_ARCHIVO') && bit.some(b => b.accion === 'RETIRAR_ARCHIVO'));
+  });
+
+  test('rechaza tipos no permitidos, vacíos, sin permiso o demasiado grandes', async () => {
+    assert.equal((await subir(U.adm, 'script.exe', Buffer.from('x'))).status, 422);
+    assert.equal((await subir(U.adm, 'pagina.html', Buffer.from('<script>'))).status, 422);
+    assert.equal((await subir(U.adm, 'vacio.csv', Buffer.alloc(0))).status, 422);
+    assert.equal((await subir(U.con, 'datos.csv', Buffer.from('a'))).status, 403);
+    assert.equal((await subir(U.adm, 'grande.csv', Buffer.alloc(15 * 1024 * 1024 + 1, 65))).status, 422);
+    const r = await subir(U.adm, '../../etc/x.csv', Buffer.from('a'));
+    assert.equal(r.status, 200);
+    const lista = await ok(pedir('GET', '/api/presupuesto/ejercicios/2027/archivos', { como: U.con }));
+    assert.ok(!lista[0].nombre.includes('/'), lista[0].nombre);
+  });
+});
+
+describe('Preguntas al asistente', () => {
+  test('sin llave queda inactivo y lo dice', async () => {
+    const r = await ok(pedir('GET', '/api/presupuesto/versiones/1/preguntas', { como: U.con }));
+    assert.equal(r.activo, false);
+    const p = await pedir('POST', '/api/presupuesto/versiones/1/preguntas', { como: U.con, cuerpo: { pregunta: 'Hola' } });
+    assert.equal(p.status, 503);
+  });
+
+  test('con un cliente: envía los datos de la versión, guarda la respuesta y el historial', async () => {
+    const llamadas = [];
+    const cliente = { beta: { messages: { create: async req => { llamadas.push(req); return { model: req.model, stop_reason: 'end_turn', content: [{ type: 'text', text: `Respuesta ${llamadas.length}` }], usage: { input_tokens: 10, output_tokens: 5 } }; } } } };
+    const { crearAsistente } = await import('../servidor/presupuesto/asistente.js');
+    const s2 = crearServidor(db, { auth: { modo: 'desarrollo' }, asistente: crearAsistente({ cliente, modelo: 'modelo-prueba' }) });
+    await new Promise(r => s2.listen(0, '127.0.0.1', r));
+    const b2 = `http://127.0.0.1:${s2.address().port}`;
+    const preg = (cuerpo, como = U.con) => fetch(`${b2}/api/presupuesto/versiones/1/preguntas`, { method: 'POST', headers: { 'X-Finantia': '1', 'X-Finantia-Correo': como, 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+    try {
+      assert.equal((await preg({ pregunta: '' })).status, 422);
+      assert.equal((await preg({ pregunta: 'x', escenario: 'Otro' })).status, 422);
+      const r1 = await preg({ pregunta: '¿Cuál es el EBITDA?', escenario: 'Pesimista' });
+      assert.equal(r1.status, 200);
+      assert.equal((await r1.json()).respuesta, 'Respuesta 1');
+      const req = llamadas[0];
+      assert.equal(req.model, 'modelo-prueba');
+      const texto = JSON.stringify(req.messages);
+      assert.match(texto, /Escenario por defecto: Pesimista/);
+      assert.match(texto, /estadoResultados/);
+      assert.doesNotMatch(texto, /LP|planUnits/, 'no envía la nómina plan por línea');
+      await preg({ pregunta: '¿Y el resultado?' });
+      assert.equal(llamadas[1].messages.length, 3, 'incluye la pregunta anterior');
+      const h = await (await fetch(`${b2}/api/presupuesto/versiones/1/preguntas`, { headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.adm } })).json();
+      assert.equal(h.activo, true);
+      assert.deepEqual(h.preguntas.map(x => x.respuesta), ['Respuesta 1', 'Respuesta 2']);
+    } finally { await new Promise(r => s2.close(r)); }
+  });
+});

@@ -9,10 +9,12 @@ import { fileURLToPath } from 'node:url';
 import { ErrorFinantia } from '../errores.js';
 import { configurarAutenticacion, identificar } from './autenticacion.js';
 import { rutasApi } from './api.js';
+import { crearAsistente } from '../presupuesto/asistente.js';
 
 const WEB = fileURLToPath(new URL('../../web/', import.meta.url));
+const MOTOR = fileURLToPath(new URL('../../motor/', import.meta.url)); /* el navegador usa el mismo motor de cálculo */
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json' };
-const HTTP = { SIN_SESION: 401, NO_AUTORIZADO: 403, NO_ENCONTRADO: 404, ESTADO_INVALIDO: 409, DATOS_INVALIDOS: 422 };
+const HTTP = { SIN_SESION: 401, NO_AUTORIZADO: 403, NO_ENCONTRADO: 404, ESTADO_INVALIDO: 409, DATOS_INVALIDOS: 422, NO_DISPONIBLE: 503 };
 
 function cabecerasSeguridad(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -30,6 +32,12 @@ const json = (res, codigo, cuerpo) => {
   res.end(JSON.stringify(cuerpo));
 };
 
+async function leerCrudo(req, limite) {
+  const partes = []; let n = 0;
+  for await (const c of req) { n += c.length; if (n > limite) throw new ErrorFinantia('DATOS_INVALIDOS', 'El archivo supera el tamaño permitido'); partes.push(c); }
+  return Buffer.concat(partes);
+}
+
 async function leerCuerpo(req, limite = 2 * 1024 * 1024) {
   const partes = []; let n = 0;
   for await (const c of req) { n += c.length; if (n > limite) throw new ErrorFinantia('DATOS_INVALIDOS', 'Cuerpo demasiado grande'); partes.push(c); }
@@ -41,9 +49,11 @@ async function estatico(req, res) {
   const url = new URL(req.url, 'http://x');
   let ruta;
   try { ruta = decodeURIComponent(url.pathname); } catch { return json(res, 400, { error: 'Ruta inválida' }); }
-  if (ruta === '/' || !extname(ruta)) ruta = '/index.html';
-  const archivo = normalize(join(WEB, ruta));
-  if (!archivo.startsWith(WEB)) return json(res, 404, { error: 'No encontrado' });
+  let raiz = WEB;
+  if (ruta.startsWith('/motor/')) { raiz = MOTOR; ruta = ruta.slice('/motor'.length); if (extname(ruta) !== '.js') return json(res, 404, { error: 'No encontrado' }); }
+  else if (ruta === '/' || !extname(ruta)) ruta = '/index.html';
+  const archivo = normalize(join(raiz, ruta));
+  if (!archivo.startsWith(raiz)) return json(res, 404, { error: 'No encontrado' });
   try {
     const cuerpo = await readFile(archivo);
     res.writeHead(200, { 'Content-Type': TIPOS[extname(archivo)] || 'application/octet-stream', 'Cache-Control': ruta === '/index.html' ? 'no-cache' : 'public, max-age=300' });
@@ -55,8 +65,8 @@ async function estatico(req, res) {
  * @param {object} db    conexión (servidor/db/conexion.js)
  * @param {object} [op]  { auth } configuración de autenticación (por defecto, desde el entorno)
  */
-export function crearServidor(db, { auth = configurarAutenticacion() } = {}) {
-  const rutas = rutasApi(db, auth);
+export function crearServidor(db, { auth = configurarAutenticacion(), asistente = crearAsistente() } = {}) {
+  const rutas = rutasApi(db, auth, asistente);
   return createServer(async (req, res) => {
     cabecerasSeguridad(res);
     const url = new URL(req.url, 'http://x');
@@ -69,11 +79,20 @@ export function crearServidor(db, { auth = configurarAutenticacion() } = {}) {
         if (r.metodo !== req.method) continue;
         const m = url.pathname.match(r.patron);
         if (!m) continue;
-        const ctx = { params: m.groups || {}, query: Object.fromEntries(url.searchParams), body: ['POST', 'PUT', 'PATCH'].includes(req.method) ? await leerCuerpo(req) : {} };
+        const ctx = { params: m.groups || {}, query: Object.fromEntries(url.searchParams), headers: req.headers };
         if (r.publica) return json(res, 200, await r.fn(ctx));
         if (req.headers['x-finantia'] !== '1') return json(res, 403, { error: 'Falta la cabecera X-Finantia', codigo: 'NO_AUTORIZADO' }); /* frena peticiones de otros sitios */
         ctx.actor = await identificar(db, auth, req, { registrar: r.registrarIngreso });
+        ctx.body = !['POST', 'PUT', 'PATCH'].includes(req.method) ? {} : r.crudo ? await leerCrudo(req, r.crudo) : await leerCuerpo(req);
         const out = await r.fn(ctx);
+        if (out && out.descarga) {
+          const { nombre, contenido } = out.descarga;
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream', 'Content-Length': contenido.length, 'Cache-Control': 'no-store',
+            'Content-Disposition': `attachment; filename="${nombre.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(nombre)}`
+          });
+          return res.end(contenido);
+        }
         return json(res, 200, out ?? { ok: true });
       }
       json(res, 404, { error: 'Ruta no encontrada' });
