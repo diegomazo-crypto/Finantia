@@ -11,7 +11,7 @@
  */
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { crearModelo, DEFAULTS, ESCS, lineasMensuales } from '../../motor/index.js';
+import { crearModelo, DEFAULTS, ESCS, FIXED, lineasMensuales } from '../../motor/index.js';
 import { exigir } from '../admin/permisos.js';
 import { registrar } from '../admin/bitacora.js';
 import { falla, DATOS_INVALIDOS, NO_ENCONTRADO, ESTADO_INVALIDO, NO_AUTORIZADO } from '../errores.js';
@@ -87,7 +87,9 @@ export function validarSupuestos(s) {
     } else if (k === 'metas') {
       for (const [mk, mv] of Object.entries(s.metas)) {
         if (mk === 'ure') { if (!NUM(mv) || mv < 0) err('metas.ure'); continue; }
-        if (!Array.isArray(mv) || mv.some(x => !NUM(x) || x < 0)) err(`metas.${mk}`);
+        const ref = FIXED.metas[mk];
+        if (!ref) err(`metas: unidad desconocida ${mk}`);
+        if (!Array.isArray(mv) || mv.length !== ref.meta.length || mv.some(x => !NUM(x) || x < 0)) err(`metas.${mk} debe ser una lista de ${ref.meta.length} cantidades`);
       }
     } else if (k === 'esicVentas' || k === 'esicPct') { if (!NUM(s[k]) || s[k] < 0) err(k); }
     else err(`clave desconocida ${k}`);
@@ -168,7 +170,8 @@ export async function crearVersion(db, actor, { ejercicio, nombre, datosBaseId =
     if (ej.estado !== 'ABIERTO') falla(ESTADO_INVALIDO, `El ejercicio ${ejercicio} está cerrado`);
     let base = datosBaseId, sup = supuestos;
     if (copiaDe) { const o = await leerVersion(t, copiaDe); base = o.datos_base_id; sup = mezclar(o.supuestos, supuestos); }
-    if (!base) falla(DATOS_INVALIDOS, 'Indique los datos base o la versión de la que se copia');
+    if (!base) base = (await t.query('SELECT max(id) AS id FROM datos_base')).rows[0].id; /* por defecto, los últimos cargados */
+    if (!base) falla(DATOS_INVALIDOS, 'Todavía no hay datos base cargados');
     if (!(await t.query('SELECT 1 FROM datos_base WHERE id = $1', [base])).rows.length) falla(NO_ENCONTRADO, `No existen los datos base ${base}`);
     const numero = Number((await t.query('SELECT COALESCE(max(numero), 0) + 1 AS n FROM version WHERE ejercicio = $1', [ejercicio])).rows[0].n);
     const r = (await t.query(`INSERT INTO version (ejercicio, numero, nombre, datos_base_id, supuestos, copia_de, creada_por) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
@@ -301,6 +304,14 @@ export async function listarEjercicios(db, actor) {
 export async function listarDatosBase(db, actor) {
   exigir(actor, M, 'ver');
   return (await db.query('SELECT id, anio_base, descripcion, huella, cargado_en FROM datos_base ORDER BY id DESC')).rows.map(r => ({ ...r, id: Number(r.id) }));
+}
+
+/** Contenido de unos datos base, para que el navegador corra el motor (sensibilidad, programación, ingresos). */
+export async function contenidoDatosBase(db, actor, id) {
+  exigir(actor, M, 'ver');
+  const r = (await db.query('SELECT contenido FROM datos_base WHERE id = $1', [id])).rows[0];
+  if (!r) falla(NO_ENCONTRADO, `No existen los datos base ${id}`);
+  return typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido;
 }
 
 const cacheBase = new Map();

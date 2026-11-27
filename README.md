@@ -23,7 +23,12 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 | Sección | Qué muestra |
 |---|---|
 | Presupuesto › Ejercicios | Ejercicios abiertos, sus versiones y su estado; crear una versión desde cero o como copia de otra |
+| Presupuesto › Archivos | Soportes del ejercicio (Excel, CSV, PDF…, hasta 15 MB): subir, descargar y retirar; quedan en la bitácora |
 | Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro |
+| Versión › Ingresos | Puente del ingreso por unidad y por escenario, metas de nuevos por intake (editables), maestrías por cohortes y Barranquilla |
+| Versión › Costo de prestación | Costo por unidad, Vértice frente a tradicional, topes por grupo (editables) y programación académica optimizada (se aplica al escenario) |
+| Versión › Sensibilidad | Tornado, punto de equilibrio y metas inversas, tablas volumen × descuento y volumen × SMMLV |
+| Versión › Preguntas | Preguntas a Claude sobre la versión; se guardan para el equipo. Se activa con `ANTHROPIC_API_KEY` en el servidor |
 | Versión › Por unidad | Estado de resultados de las siete unidades, EBITDA por unidad e ingreso neto frente a 2026E |
 | Versión › Mensual y caja | Resultado mes a mes y flujo de caja con el saldo mínimo |
 | Versión › Proyección y NPV | 2026E–2031, FCF, NPV al 12%, TIR y payback simple y descontado |
@@ -31,7 +36,13 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 | Versión › Aprobación | Enviar, aprobar o devolver con observaciones, decisiones, líneas presupuestales aprobadas e historial |
 | Administración | Usuarios y su rol en cada módulo, número y orden de aprobaciones, bitácora con filtros |
 
-Las pantallas usan la misma paleta y tipografía de Finantia 1.0, funcionan en teléfono y tienen modo oscuro. Faltan, para una siguiente etapa, las pestañas de 1.0 de ingresos, costo de prestación, sensibilidad, evaluación del equipo, archivos y preguntas.
+Las pantallas usan la misma paleta y tipografía de Finantia 1.0, funcionan en teléfono y tienen modo oscuro. Ingresos, costo de prestación y sensibilidad corren en el navegador el mismo motor del servidor (`/motor/index.js`) con los datos base y los supuestos de la versión; si el resultado no coincide con el guardado, la pantalla lo advierte.
+
+De Finantia 1.0 no se pasaron: la evaluación del presupuesto del equipo (un análisis puntual de 2027, no una función de la plataforma) y el plan de nómina por cargo (datos personales que no están en el repositorio).
+
+### Asistente (pestaña Preguntas)
+
+Envía a la API de Anthropic los supuestos y los resultados agregados de la versión (estado de resultados total y por unidad, proyección, mensual y caja de los tres escenarios). No envía nómina por persona ni por cargo. Variables: `ANTHROPIC_API_KEY` (sin ella la pestaña queda inactiva) y `FINANTIA_MODELO` (por defecto `claude-opus-5-5`).
 
 ## Qué calcula
 
@@ -133,7 +144,7 @@ La aplicación se registra en Microsoft Entra ID como aplicación de una sola p�
 
 - `pruebas/cuadre_excel.test.js`: compara 2.727 cifras con el Excel v21 recalculado en cada escenario (presupuesto por rubro, estado de resultados por unidad, proyección y FCF 2026E–2031, métricas, mensual, flujo de caja y sensibilidad). Tolerancia ±1 millón por cifra; la diferencia máxima observada es menor a 1 peso.
 - `pruebas/servidor.test.js`: permisos, ingreso, Administración, ciclo completo de una versión con una y dos aprobaciones, y bitácora. Corre sobre PGlite (PostgreSQL en memoria); en GitHub también corre contra PostgreSQL 16.
-- `pruebas/api.test.js`: el servidor por HTTP: cabeceras de seguridad, archivos fuera de `web/`, sesión, permisos de cada rol, ciclo completo de una versión, Administración e ingreso con Microsoft 365 (con un verificador de prueba).
+- `pruebas/api.test.js`: el servidor por HTTP: motor servido al navegador (mismo resultado que el servidor), metas, archivos (tipos, tamaño, permisos, retiro), asistente con un cliente de prueba, cabeceras de seguridad, archivos fuera de `web/`, sesión, permisos de cada rol, ciclo completo de una versión, Administración e ingreso con Microsoft 365 (con un verificador de prueba).
 - `pruebas/equivalencia_simulador.test.js`: 25 combinaciones aleatorias de supuestos contra el motor original de Finantia Admon 1.0, más el tornado, el punto de equilibrio y la programación optimizada tal como los muestran sus pantallas.
 
 Las referencias se regeneran con:

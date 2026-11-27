@@ -1,56 +1,7 @@
 /* Finantia 2.0 · pantallas (JavaScript sin dependencias). Rutas con #/… */
 
-const $ = s => document.querySelector(s);
-const app = $('#app');
-const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ESCS = ['Pesimista', 'Moderado', 'Optimista'];
-const ESTADOS = { BORRADOR: 'Borrador', EN_REVISION: 'En revisión', APROBADA: 'Aprobada', REEMPLAZADA: 'Reemplazada' };
-const ROLES = { VISUALIZACION: 'Visualización', ADMINISTRACION: 'Administración', APROBACION: 'Aprobación' };
-const ACCIONES = {
-  INGRESO: 'Ingresó', CREAR_USUARIO: 'Creó un usuario', ACTIVAR_USUARIO: 'Activó un usuario', DESACTIVAR_USUARIO: 'Desactivó un usuario', CAMBIAR_ACTIVO: 'Cambió el estado de un usuario',
-  ASIGNAR_ACCESO: 'Asignó un acceso', QUITAR_ACCESO: 'Quitó un acceso', CONFIGURAR_APROBACION: 'Configuró la aprobación',
-  CARGAR_DATOS_BASE: 'Cargó datos base', CREAR_EJERCICIO: 'Abrió un ejercicio', CREAR_VERSION: 'Creó la versión', EDITAR_SUPUESTOS: 'Editó supuestos',
-  ENVIAR_REVISION: 'Envió a revisión', APROBAR: 'Aprobó', DEVOLVER: 'Devolvió', VERSION_APROBADA: 'La versión quedó aprobada', REEMPLAZAR: 'Quedó reemplazada', CAMBIAR_SUPERUSUARIO: 'Cambió superusuario', INICIALIZAR: 'Inicializó Finantia'
-};
-
-/* ---------- formatos ---------- */
-const nf0 = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
-const nf1 = new Intl.NumberFormat('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-const M = v => v == null || !isFinite(v) ? '—' : (v < 0 ? '−' : '') + '$' + nf0.format(Math.abs(v) / 1e6) + ' M';
-const Mn = v => v == null || !isFinite(v) ? '—' : (v < 0 ? '−' : '') + nf0.format(Math.abs(v) / 1e6);
-const P = v => v == null || !isFinite(v) ? '—' : (v < 0 ? '−' : '') + nf1.format(Math.abs(v) * 100) + '%';
-const cls = v => v < 0 ? 'neg' : '';
-const fecha = s => s ? new Date(s).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
-const MESES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-
-/* ---------- sesión ---------- */
-const sesion = { config: null, perfil: null, token: null, correo: null, msal: null };
-const almacen = {
-  leer(k) { try { return sessionStorage.getItem(k); } catch { return null; } },
-  poner(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch { /* sin almacenamiento */ } }
-};
-
-async function api(metodo, ruta, cuerpo) {
-  const h = { 'X-Finantia': '1' };
-  if (cuerpo !== undefined) h['Content-Type'] = 'application/json';
-  if (sesion.token) h.Authorization = 'Bearer ' + sesion.token;
-  if (sesion.correo) h['X-Finantia-Correo'] = sesion.correo;
-  const r = await fetch(ruta, { method: metodo, headers: h, body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo) });
-  const datos = r.status === 204 ? null : await r.json().catch(() => null);
-  if (!r.ok) {
-    if (r.status === 401 && ruta !== '/api/ingreso') { salir(false); }
-    const e = new Error(datos?.error || `Error ${r.status}`); e.status = r.status; throw e;
-  }
-  return datos;
-}
-
-function aviso(texto, error = false) {
-  const a = $('#aviso'); a.textContent = texto; a.className = error ? 'error' : ''; a.hidden = false;
-  clearTimeout(aviso.t); aviso.t = setTimeout(() => { a.hidden = true; }, error ? 6000 : 3000);
-}
-async function accion(fn, ok) {
-  try { const r = await fn(); if (ok) aviso(ok); return r; } catch (e) { aviso(e.message, true); throw e; }
-}
+import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos } from './analisis.js';
+import { $, ACCIONES, ESCS, ESTADOS, M, MESES, Mn, P, ROLES, accion, almacen, anchos, api, app, aviso, cls, esc, fecha, ganchos, kpi, modulo, nf0, nf1, sesion } from './comun.js';
 
 async function iniciar() {
   sesion.config = await api('GET', '/api/config');
@@ -92,6 +43,7 @@ function salir(recargar = true) {
   location.reload();
 }
 $('#salir').addEventListener('click', () => salir());
+ganchos.sinSesion = () => salir(false);
 
 async function pantallaIngreso(error) {
   $('#cabecera').hidden = true;
@@ -114,7 +66,6 @@ async function pantallaIngreso(error) {
 }
 
 /* ---------- enrutador ---------- */
-const modulo = c => sesion.perfil.modulos.find(m => m.modulo === c);
 
 function pintarMenu(actual) {
   const items = [];
@@ -176,7 +127,8 @@ async function pantallaEjercicios(anio) {
           <label class="campo">Nombre de la versión<input name="nombre" required maxlength="120" placeholder="Ej.: Presupuesto ${anio} · ajuste de nómina"></label>
           <label class="campo">Partir de<select name="copiaDe"><option value="">Supuestos por defecto</option>${versiones.map(v => `<option value="${v.id}">Copia de V${v.numero}</option>`).join('')}</select></label>
           <button class="btn primario" type="submit">Crear versión</button></form>` : ''}
-    </div>` : '<div class="tarjeta"><p class="nota">Todavía no hay ejercicios abiertos.</p></div>'}`;
+    </div><section id="archivos"></section>` : '<div class="tarjeta"><p class="nota">Todavía no hay ejercicios abiertos.</p></div>'}`;
+  if (ej) vArchivos($('#archivos'), anio).catch(e => { $('#archivos').innerHTML = `<div class="tarjeta"><p class="nota">${esc(e.message)}</p></div>`; });
 
   $('#nuevo-ej')?.addEventListener('click', () => accion(() => api('POST', '/api/presupuesto/ejercicios', { anio: sig }), `Ejercicio ${sig} abierto`).then(() => { location.hash = '#/presupuesto/' + sig; }));
   $('#nueva-v')?.addEventListener('submit', async e => {
@@ -189,7 +141,7 @@ async function pantallaEjercicios(anio) {
 /* =========================================================
    PRESUPUESTO · una versión
    ========================================================= */
-const PESTANAS = [['resumen', 'Estado de resultados'], ['unidades', 'Por unidad'], ['mensual', 'Mensual y caja'], ['proyeccion', 'Proyección y NPV'], ['supuestos', 'Supuestos'], ['aprobacion', 'Aprobación']];
+const PESTANAS = [['resumen', 'Estado de resultados'], ['ingresos', 'Ingresos'], ['unidades', 'Por unidad'], ['costo', 'Costo de prestación'], ['mensual', 'Mensual y caja'], ['proyeccion', 'Proyección y NPV'], ['sensibilidad', 'Sensibilidad'], ['supuestos', 'Supuestos'], ['preguntas', 'Preguntas'], ['aprobacion', 'Aprobación']];
 let cacheVersion = null;
 
 async function pantallaVersion(id, pestana) {
@@ -213,13 +165,17 @@ async function pantallaVersion(id, pestana) {
     <nav class="pestanas" aria-label="Secciones">${PESTANAS.map(([k, t]) => `<a href="#/presupuesto/v/${id}/${k}" ${k === pestana ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>
     <section id="cuerpo"></section>`;
   app.querySelectorAll('[data-esc]').forEach(b => b.onclick = () => { almacen.poner('finantia.escenario', b.dataset.esc); pantallaVersion(id, pestana); });
+  app.querySelector('.pestanas [aria-current]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   const cuerpo = $('#cuerpo');
-  const fn = { resumen: vResumen, unidades: vUnidades, mensual: vMensual, proyeccion: vProyeccion, supuestos: vSupuestos, aprobacion: vAprobacion }[pestana] || vResumen;
-  await fn(cuerpo, v, escenario);
-  cuerpo.querySelectorAll('[data-w]').forEach(el => { el.style.width = el.dataset.w + '%'; el.style.left = (el.dataset.l || 0) + '%'; });
+  const fn = {
+    resumen: vResumen, ingresos: vIngresos, unidades: vUnidades, costo: vCosto, mensual: vMensual, proyeccion: vProyeccion,
+    sensibilidad: vSensibilidad, supuestos: vSupuestos, preguntas: vPreguntas, aprobacion: vAprobacion
+  }[pestana] || vResumen;
+  if (['ingresos', 'costo', 'sensibilidad'].includes(pestana)) cuerpo.innerHTML = '<p class="nota">Calculando…</p>';
+  await fn(cuerpo, v, escenario, { recargar: () => { cacheVersion = null; pantallaVersion(id, pestana); } });
+  anchos(cuerpo);
 }
 
-const kpi = (t, v, sub = '') => `<div class="kpi"><small>${t}</small><b class="${v < 0 ? 'neg' : ''}">${M(v)}</b>${sub ? `<small>${sub}</small>` : ''}</div>`;
 
 /* Estructura del estado de resultados (misma de Finantia 1.0) */
 const EERR = [
@@ -304,7 +260,7 @@ const SUP_ESC = [
   ['price', 'Incremento de matrícula', 'p'], ['ipc', 'IPC', 'p'], ['sm', 'Incremento del SMMLV', 'p'],
   ['cump', 'Cumplimiento de metas de nuevos', 'p'], ['cumpURE', 'Cumplimiento meta URE', 'p'], ['dpp', 'Ajuste del descuento (pp)', 'p']
 ];
-const SUP_UNI = [['des', 'Deserción de antiguos'], ['dNew', 'Variación de estudiantes nuevos']];
+const SUP_UNI = [['des', 'Deserción de antiguos'], ['dNew', 'Variación de estudiantes nuevos (unidades sin metas por intake)'], ['catAdj', 'Ajuste de cátedra']];
 
 function vSupuestos(c, v) {
   const mod = modulo('PRESUPUESTO'), editable = mod.editar && v.estado === 'BORRADOR';
