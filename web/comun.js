@@ -12,14 +12,16 @@ export const ACCIONES = {
   ASIGNAR_ACCESO: 'Asignó un acceso', QUITAR_ACCESO: 'Quitó un acceso', CONFIGURAR_APROBACION: 'Configuró la aprobación',
   CARGAR_DATOS_BASE: 'Cargó datos base', CREAR_EJERCICIO: 'Abrió un ejercicio', CREAR_VERSION: 'Creó la versión', EDITAR_SUPUESTOS: 'Editó supuestos',
   ENVIAR_REVISION: 'Envió a revisión', APROBAR: 'Aprobó', DEVOLVER: 'Devolvió', VERSION_APROBADA: 'La versión quedó aprobada', REEMPLAZAR: 'Quedó reemplazada', CAMBIAR_SUPERUSUARIO: 'Cambió superusuario', INICIALIZAR: 'Inicializó Finantia',
-  SUBIR_ARCHIVO: 'Subió un archivo', RETIRAR_ARCHIVO: 'Retiró un archivo', PREGUNTAR: 'Preguntó al asistente'
+  SUBIR_ARCHIVO: 'Subió un archivo', RETIRAR_ARCHIVO: 'Retiró un archivo', PREGUNTAR: 'Preguntó al asistente',
+  SUBIR_NOMINA: 'Cargó la nómina por cargo', VER_NOMINA: 'Consultó la nómina por cargo', RETIRAR_NOMINA: 'Retiró la nómina por cargo', CARGAR_EVALUACION: 'Cargó la evaluación del equipo'
 };
 
 /* ---------- formatos ---------- */
 export const nf0 = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 });
 export const nf1 = new Intl.NumberFormat('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-export const M = v => v == null || !isFinite(v) ? '—' : (v < 0 ? '−' : '') + '$' + nf0.format(Math.abs(v) / 1e6) + ' M';
-export const Mn = v => v == null || !isFinite(v) ? '—' : (v < 0 ? '−' : '') + nf0.format(Math.abs(v) / 1e6);
+const mill = v => Math.round(v / 1e6); /* el signo se decide después de redondear: nunca «−0» */
+export const M = v => v == null || !isFinite(v) ? '—' : (mill(v) < 0 ? '−' : '') + '$' + nf0.format(Math.abs(mill(v))) + ' M';
+export const Mn = v => v == null || !isFinite(v) ? '—' : (mill(v) < 0 ? '−' : '') + nf0.format(Math.abs(mill(v)));
 export const P = v => v == null || !isFinite(v) ? '—' : (v < 0 ? '−' : '') + nf1.format(Math.abs(v) * 100) + '%';
 export const cls = v => v < 0 ? 'neg' : '';
 export const fecha = s => s ? new Date(s).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
