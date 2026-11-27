@@ -3,6 +3,8 @@ import * as A from '../admin/admin.js';
 import { puede, veDetalleSensible } from '../admin/permisos.js';
 import * as P from '../presupuesto/servicio.js';
 import * as AR from '../presupuesto/archivos.js';
+import * as EV from '../presupuesto/evaluacion.js';
+import { TAMANO_MAXIMO as NOMINA_MAX } from '../presupuesto/nomina.js';
 import { falla, DATOS_INVALIDOS } from '../errores.js';
 import { DEFAULTS } from '../../motor/parametros.js';
 
@@ -19,7 +21,7 @@ function perfil(a) {
   return { id: a.id, nombre: a.nombre, correo: a.correo, superusuario: a.es_superusuario, modulos, admin };
 }
 
-export function rutasApi(db, auth, asistente) {
+export function rutasApi(db, auth, asistente, nomina) {
   const rutas = [
     ruta('GET', '/api/config', () => (auth.modo === 'entra' ? { modo: 'entra', tenant: auth.tenant, clientId: auth.clientId } : { modo: 'desarrollo' }), { publica: true }),
     ruta('POST', '/api/ingreso', ({ actor }) => perfil(actor), { registrarIngreso: true }),
@@ -74,6 +76,19 @@ export function rutasApi(db, auth, asistente) {
     }, { crudo: AR.TAMANO_MAXIMO }),
     ruta('GET', '/api/presupuesto/archivos/:id', async ({ actor, params }) => ({ descarga: await AR.descargarArchivo(db, actor, entero(params.id)) })),
     ruta('DELETE', '/api/presupuesto/archivos/:id', ({ actor, params }) => AR.retirarArchivo(db, actor, entero(params.id))),
+
+    /* Nómina por cargo (cifrada; requiere el detalle sensible) */
+    ruta('GET', '/api/presupuesto/ejercicios/:anio/nomina', ({ actor, params }) => nomina.ver(db, actor, entero(params.anio))),
+    ruta('POST', '/api/presupuesto/ejercicios/:anio/nomina', async ({ actor, params, body, headers }) => {
+      let nombre;
+      try { nombre = decodeURIComponent(headers['x-nombre'] || ''); } catch { falla(DATOS_INVALIDOS, 'Nombre de archivo inválido'); }
+      return { id: await nomina.subir(db, actor, entero(params.anio), { nombre, contenido: body }) };
+    }, { crudo: NOMINA_MAX }),
+    ruta('DELETE', '/api/presupuesto/nomina/:id', ({ actor, params }) => nomina.retirar(db, actor, entero(params.id))),
+
+    /* Evaluación del presupuesto del equipo (solo 2027; requiere el detalle sensible) */
+    ruta('GET', '/api/presupuesto/ejercicios/:anio/evaluacion', async ({ actor, params }) => ({ evaluacion: await EV.obtenerEvaluacion(db, actor, entero(params.anio)) })),
+    ruta('PUT', '/api/presupuesto/ejercicios/:anio/evaluacion', ({ actor, params, body }) => EV.cargarEvaluacion(db, actor, entero(params.anio), body)),
 
     /* Preguntas al asistente */
     ruta('GET', '/api/presupuesto/versiones/:id/preguntas', async ({ actor, params }) => ({ activo: asistente.activo, preguntas: await asistente.historial(db, actor, entero(params.id)) })),

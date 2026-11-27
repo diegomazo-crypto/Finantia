@@ -282,7 +282,7 @@ export async function vArchivos(c, anio) {
   const mod = modulo('PRESUPUESTO');
   const lista = await api('GET', `/api/presupuesto/ejercicios/${anio}/archivos`);
   c.innerHTML = `<div class="tarjeta"><h2>Archivos del presupuesto ${anio}</h2>
-    <p class="nota">Soportes para elaborar el presupuesto: matrículas, programación académica, plan de nómina, contratos, cotizaciones. Los ve todo el equipo del módulo. Un archivo retirado deja de verse pero queda en la bitácora.</p>
+    <p class="nota">Soportes para elaborar el presupuesto: matrículas, programación académica, contratos, cotizaciones. Los ve todo el equipo del módulo y no se cifran: la nómina por persona o por cargo no va aquí, sino en la pestaña Nómina por cargo de una versión. Un archivo retirado deja de verse pero queda en la bitácora.</p>
     ${lista.length ? `<div class="tabla-cont"><table><thead><tr><th>Archivo</th><th class="izq">Descripción</th><th>Tamaño</th><th class="izq">Subido por</th><th></th></tr></thead><tbody>
       ${lista.map(a => `<tr><td>${esc(a.nombre)}</td><td class="izq nota">${esc(a.descripcion || '')}</td><td>${tamano(a.tamano)}</td><td class="izq">${esc(a.subido_por)}<div class="nota">${fecha(a.subido_en)}</div></td>
         <td><button class="btn" type="button" data-bajar="${a.id}" data-nombre="${esc(a.nombre)}">Descargar</button>${mod.editar ? ` <button class="btn peligro" type="button" data-retirar="${a.id}">Retirar</button>` : ''}</td></tr>`).join('')}

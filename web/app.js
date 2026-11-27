@@ -1,6 +1,7 @@
 /* Finantia 2.0 · pantallas (JavaScript sin dependencias). Rutas con #/… */
 
 import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos } from './analisis.js';
+import { vNomina, vEvaluacion } from './sensible.js';
 import { $, ACCIONES, ESCS, ESTADOS, M, MESES, Mn, P, ROLES, accion, almacen, anchos, api, app, aviso, cls, esc, fecha, ganchos, kpi, modulo, nf0, nf1, sesion } from './comun.js';
 
 async function iniciar() {
@@ -141,7 +142,9 @@ async function pantallaEjercicios(anio) {
 /* =========================================================
    PRESUPUESTO · una versión
    ========================================================= */
-const PESTANAS = [['resumen', 'Estado de resultados'], ['ingresos', 'Ingresos'], ['unidades', 'Por unidad'], ['costo', 'Costo de prestación'], ['mensual', 'Mensual y caja'], ['proyeccion', 'Proyección y NPV'], ['sensibilidad', 'Sensibilidad'], ['supuestos', 'Supuestos'], ['preguntas', 'Preguntas'], ['aprobacion', 'Aprobación']];
+const PESTANAS = [['resumen', 'Estado de resultados'], ['ingresos', 'Ingresos'], ['unidades', 'Por unidad'], ['costo', 'Costo de prestación'], ['nomina', 'Nómina por cargo', 'sensible'], ['mensual', 'Mensual y caja'], ['proyeccion', 'Proyección y NPV'], ['sensibilidad', 'Sensibilidad'], ['evaluacion', 'Evaluación del equipo', 'sensible', 2027], ['supuestos', 'Supuestos'], ['preguntas', 'Preguntas'], ['aprobacion', 'Aprobación']];
+/* Nómina por cargo y evaluación: solo con el detalle sensible; la evaluación del equipo existe solo para 2027. */
+const pestanasDe = v => PESTANAS.filter(([, , sens, anio]) => (!sens || modulo('PRESUPUESTO')?.detalleSensible) && (!anio || anio === v.ejercicio));
 let cacheVersion = null;
 
 async function pantallaVersion(id, pestana) {
@@ -150,6 +153,8 @@ async function pantallaVersion(id, pestana) {
   const esc0 = almacen.leer('finantia.escenario');
   const escenario = ESCS.includes(esc0) ? esc0 : (v.escenario_oficial || 'Moderado');
   const r = v.resultados[escenario];
+  const pestanas = pestanasDe(v);
+  if (!pestanas.some(([k]) => k === pestana)) pestana = 'resumen';
   app.innerHTML = `
     <div class="cabeza"><div>
       <div class="miga"><a href="#/presupuesto/${v.ejercicio}">Presupuesto ${v.ejercicio}</a></div>
@@ -162,14 +167,14 @@ async function pantallaVersion(id, pestana) {
       ${kpi('Resultado neto', r.tot.RN)} ${kpi('NPV 2027–2031', r.metricas.npv, 'tasa 12%')} ${kpi('Caja mínima', r.caja.saldoMinimo, 'mes ' + MESES[r.caja.mesMinimo])}
     </div>
     <p class="nota">Cifras del escenario ${escenario}.</p>
-    <nav class="pestanas" aria-label="Secciones">${PESTANAS.map(([k, t]) => `<a href="#/presupuesto/v/${id}/${k}" ${k === pestana ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>
+    <nav class="pestanas" aria-label="Secciones">${pestanas.map(([k, t]) => `<a href="#/presupuesto/v/${id}/${k}" ${k === pestana ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>
     <section id="cuerpo"></section>`;
   app.querySelectorAll('[data-esc]').forEach(b => b.onclick = () => { almacen.poner('finantia.escenario', b.dataset.esc); pantallaVersion(id, pestana); });
   app.querySelector('.pestanas [aria-current]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   const cuerpo = $('#cuerpo');
   const fn = {
     resumen: vResumen, ingresos: vIngresos, unidades: vUnidades, costo: vCosto, mensual: vMensual, proyeccion: vProyeccion,
-    sensibilidad: vSensibilidad, supuestos: vSupuestos, preguntas: vPreguntas, aprobacion: vAprobacion
+    sensibilidad: vSensibilidad, supuestos: vSupuestos, preguntas: vPreguntas, aprobacion: vAprobacion, nomina: vNomina, evaluacion: vEvaluacion
   }[pestana] || vResumen;
   if (['ingresos', 'costo', 'sensibilidad'].includes(pestana)) cuerpo.innerHTML = '<p class="nota">Calculando…</p>';
   await fn(cuerpo, v, escenario, { recargar: () => { cacheVersion = null; pantallaVersion(id, pestana); } });
@@ -398,7 +403,7 @@ async function aUsuarios(c) {
     if (!edita) return a ? `${ROLES[a.rol]}${a.detalle_sensible ? ' · detalle' : ''}` : '—';
     return `<select data-u="${u.id}" data-m="${m.codigo}" aria-label="Rol de ${esc(u.nombre)} en ${esc(m.nombre)}"><option value="">Sin acceso</option>
       ${Object.entries(ROLES).map(([k, t]) => `<option value="${k}" ${a?.rol === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      ${m.codigo === 'PRESUPUESTO' && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" ${a.detalle_sensible ? 'checked' : ''}> detalle de nómina</label>` : ''}`;
+      ${m.codigo === 'PRESUPUESTO' && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" ${a.detalle_sensible ? 'checked' : ''}> detalle sensible (nómina por cargo y evaluación del equipo)</label>` : ''}`;
   };
   c.innerHTML = `<div class="tarjeta">
     <p class="nota">Cada persona tiene un rol por módulo. Visualización consulta; Administración edita; Aprobación aprueba o devuelve. El detalle de nómina por cargo solo lo ve quien tenga la casilla marcada. Por ahora solo Presupuesto y Administración tienen pantallas; los demás accesos quedan listos para cuando se construyan.</p>

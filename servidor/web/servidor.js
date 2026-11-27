@@ -10,6 +10,7 @@ import { ErrorFinantia } from '../errores.js';
 import { configurarAutenticacion, identificar } from './autenticacion.js';
 import { rutasApi } from './api.js';
 import { crearAsistente } from '../presupuesto/asistente.js';
+import { crearNomina } from '../presupuesto/nomina.js';
 
 const WEB = fileURLToPath(new URL('../../web/', import.meta.url));
 const MOTOR = fileURLToPath(new URL('../../motor/', import.meta.url)); /* el navegador usa el mismo motor de cálculo */
@@ -63,10 +64,10 @@ async function estatico(req, res) {
 
 /**
  * @param {object} db    conexión (servidor/db/conexion.js)
- * @param {object} [op]  { auth } configuración de autenticación (por defecto, desde el entorno)
+ * @param {object} [op]  { auth, asistente, nomina } (por defecto, configurados desde el entorno)
  */
-export function crearServidor(db, { auth = configurarAutenticacion(), asistente = crearAsistente() } = {}) {
-  const rutas = rutasApi(db, auth, asistente);
+export function crearServidor(db, { auth = configurarAutenticacion(), asistente = crearAsistente(), nomina = crearNomina() } = {}) {
+  const rutas = rutasApi(db, auth, asistente, nomina);
   return createServer(async (req, res) => {
     cabecerasSeguridad(res);
     const url = new URL(req.url, 'http://x');

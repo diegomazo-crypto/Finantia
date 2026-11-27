@@ -65,7 +65,7 @@ describe('Servidor', () => {
 
   test('el perfil dice qué puede hacer cada rol', async () => {
     const adm = await ok(pedir('POST', '/api/ingreso', { como: U.adm, cuerpo: {} }));
-    assert.deepEqual(adm.modulos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: false }]);
+    assert.deepEqual(adm.modulos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: true }]);
     assert.deepEqual(adm.admin, { ver: false, editar: false });
     const su = await ok(pedir('GET', '/api/yo', { como: U.su }));
     assert.equal(su.superusuario, true);

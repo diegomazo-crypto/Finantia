@@ -28,6 +28,8 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 | Versión › Ingresos | Puente del ingreso por unidad y por escenario, metas de nuevos por intake (editables), maestrías por cohortes y Barranquilla |
 | Versión › Costo de prestación | Costo por unidad, Vértice frente a tradicional, topes por grupo (editables) y programación académica optimizada (se aplica al escenario) |
 | Versión › Sensibilidad | Tornado, punto de equilibrio y metas inversas, tablas volumen × descuento y volumen × SMMLV |
+| Versión › Nómina por cargo | Solo con el detalle sensible. Nómina por rubro, proceso y cargo cargada en CSV, cifrada en la base; comparada con la nómina del modelo por rubro |
+| Versión › Evaluación del equipo | Solo ejercicio 2027 y con el detalle sensible. Presupuesto del equipo frente a la versión (rubros y unidades), partidas por proceso, observaciones y conclusiones |
 | Versión › Preguntas | Preguntas a Claude sobre la versión; se guardan para el equipo. Se activa con `ANTHROPIC_API_KEY` en el servidor |
 | Versión › Por unidad | Estado de resultados de las siete unidades, EBITDA por unidad e ingreso neto frente a 2026E |
 | Versión › Mensual y caja | Resultado mes a mes y flujo de caja con el saldo mínimo |
@@ -38,7 +40,12 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 
 Las pantallas usan la misma paleta y tipografía de Finantia 1.0, funcionan en teléfono y tienen modo oscuro. Ingresos, costo de prestación y sensibilidad corren en el navegador el mismo motor del servidor (`/motor/index.js`) con los datos base y los supuestos de la versión; si el resultado no coincide con el guardado, la pantalla lo advierte.
 
-De Finantia 1.0 no se pasaron: la evaluación del presupuesto del equipo (un análisis puntual de 2027, no una función de la plataforma) y el plan de nómina por cargo (datos personales que no están en el repositorio).
+### Nómina por cargo y evaluación del equipo (información sensible)
+
+Las ven y las cargan solo quienes tienen en Presupuesto el **detalle sensible** (casilla en Administración › Usuarios; el Superusuario siempre). Sus datos no están en el repositorio: se cargan desde la pantalla.
+
+- **Nómina por cargo.** CSV UTF-8 con una fila por cargo: `rubro` (4.1…6.4 o su código), `proceso`, `cargo`, `continuan`, `nuevos`, `vacantes`, `salario_2026`, `salario_2027` (salario mensual sumado de las personas del cargo) y `costo_anual`, en pesos. El costo anual se calcula con la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. El servidor rechaza el archivo si trae columnas de nombres, documentos o correos. Se guarda cifrado con AES-256-GCM; la llave de 32 bytes va en la variable `FINANTIA_LLAVE_NOMINA` (base64) y no se guarda en la base. Para crearla: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Guárdela también en un lugar seguro fuera del servidor: si se pierde, hay que volver a cargar la nómina. Cada consulta queda en la bitácora; una carga nueva retira la anterior y borra su contenido, igual que el botón Retirar. No va a las versiones ni al asistente.
+- **Evaluación del equipo.** Solo existe para el ejercicio 2027. Se carga un JSON con las cifras del equipo en pesos (`rubros`: clave del estado de resultados, `equipo`, `lectura`; `unidades`: PRE…BAQ), `partidas` por proceso, `observaciones` y `conclusiones`. La columna Modelo la calcula la pantalla con la versión y el escenario que se están viendo.
 
 ### Asistente (pestaña Preguntas)
 
@@ -145,6 +152,7 @@ La aplicación se registra en Microsoft Entra ID como aplicación de una sola p�
 - `pruebas/cuadre_excel.test.js`: compara 2.727 cifras con el Excel v21 recalculado en cada escenario (presupuesto por rubro, estado de resultados por unidad, proyección y FCF 2026E–2031, métricas, mensual, flujo de caja y sensibilidad). Tolerancia ±1 millón por cifra; la diferencia máxima observada es menor a 1 peso.
 - `pruebas/servidor.test.js`: permisos, ingreso, Administración, ciclo completo de una versión con una y dos aprobaciones, y bitácora. Corre sobre PGlite (PostgreSQL en memoria); en GitHub también corre contra PostgreSQL 16.
 - `pruebas/api.test.js`: el servidor por HTTP: motor servido al navegador (mismo resultado que el servidor), metas, archivos (tipos, tamaño, permisos, retiro), asistente con un cliente de prueba, cabeceras de seguridad, archivos fuera de `web/`, sesión, permisos de cada rol, ciclo completo de una versión, Administración e ingreso con Microsoft 365 (con un verificador de prueba).
+- `pruebas/nomina.test.js`: nómina por cargo (lectura del CSV, rechazo de columnas de personas, permisos de detalle sensible, cifrado en la base, otra llave no la lee, reemplazo y retiro borran el contenido, bitácora sin cargos ni salarios) y evaluación del equipo (solo 2027, validación, permisos).
 - `pruebas/equivalencia_simulador.test.js`: 25 combinaciones aleatorias de supuestos contra el motor original de Finantia Admon 1.0, más el tornado, el punto de equilibrio y la programación optimizada tal como los muestran sus pantallas.
 
 Las referencias se regeneran con:
@@ -166,6 +174,6 @@ Las pruebas revelaron tres hojas del Excel que no siguen al resto del libro. El 
 
 ## Qué no está en el repositorio
 
-Por confidencialidad no se subieron la nómina por cargo ni los datos de profesores del simulador interno (`CEIPA_INT`: detalle por cargo, carga académica y centros de costo por persona). La nómina entra al motor como el plan del equipo agregado por línea presupuestal y unidad (`datos/base2026.json` → `LP`). El ajuste de la nómina por número de personas por cargo del simulador interno queda para cuando se defina cómo guardar esos datos en la base de datos con control de acceso.
+Por confidencialidad no se subieron la nómina por cargo, la evaluación del equipo ni los datos de profesores del simulador interno (`CEIPA_INT`). La nómina por cargo y la evaluación se cargan desde la pantalla (ver arriba); los datos de profesores no se usan. La nómina entra al motor como el plan del equipo agregado por línea presupuestal y unidad (`datos/base2026.json` → `LP`).
 
 Tampoco están el Excel ni los simuladores 1.0; su respaldo está en la carpeta del proyecto `finantia_1.0/`.

@@ -21,6 +21,8 @@ if (process.env.FINANTIA_DEMO === '1') {
   await migrar(db);
   const { sembrarDemo } = await import('./demo.js');
   await sembrarDemo(db);
+  /* La demo no guarda nada en disco: una llave de nómina de un solo uso basta. */
+  process.env.FINANTIA_LLAVE_NOMINA ||= (await import('node:crypto')).randomBytes(32).toString('base64');
 } else {
   db = await conectar();
   await migrar(db);
