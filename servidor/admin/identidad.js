@@ -8,7 +8,12 @@ import { cargarActor } from './permisos.js';
 import { registrar } from './bitacora.js';
 import { falla, NO_AUTORIZADO } from '../errores.js';
 
-export async function ingresar(db, { oid, correo, nombre }) {
+/**
+ * @param {object} claims  {oid, correo, nombre} del token verificado
+ * @param {object} [op]    registrar: true deja el ingreso en la bitácora y actualiza la fecha de último ingreso
+ *                         (se usa una vez al iniciar sesión; en cada petición basta identificar)
+ */
+export async function ingresar(db, { oid, correo, nombre }, { registrar: reg = true } = {}) {
   if (!oid) falla(NO_AUTORIZADO, 'Token sin identificador de usuario');
   const c = String(correo || '').trim().toLowerCase();
   const id = await db.tx(async t => {
@@ -20,6 +25,7 @@ export async function ingresar(db, { oid, correo, nombre }) {
       await t.query('UPDATE usuario SET entra_oid = $2 WHERE id = $1', [u.id, oid]);
     }
     if (!u.activo) falla(NO_AUTORIZADO, 'Usuario desactivado');
+    if (!reg) return Number(u.id);
     await t.query('UPDATE usuario SET ultimo_ingreso = now(), nombre = COALESCE(NULLIF($2, \'\'), nombre) WHERE id = $1', [u.id, nombre || '']);
     await registrar(t, { usuarioId: u.id, modulo: 'ADMINISTRACION', accion: 'INGRESO', entidad: 'usuario', entidadId: u.id });
     return Number(u.id);

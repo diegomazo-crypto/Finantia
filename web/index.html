@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Finantia</title>
+  <link rel="icon" href="/marca/finantia.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@600&display=swap">
+  <link rel="stylesheet" href="/estilos.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header class="top" id="cabecera" hidden>
+    <div class="wrap fila">
+      <a class="marca" href="#/">
+        <img src="/marca/finantia.png" alt="" width="36" height="36">
+        <span><small>CEIPA</small><b>Finantia</b></span>
+      </a>
+      <nav id="menu" aria-label="Módulos"></nav>
+      <div class="usuario"><span id="quien"></span><button class="btn" id="salir" type="button">Salir</button></div>
+    </div>
+  </header>
+  <main class="wrap" id="app" aria-live="polite"><p class="nota">Cargando…</p></main>
+  <div id="aviso" role="status" hidden></div>
+</body>
+</html>
