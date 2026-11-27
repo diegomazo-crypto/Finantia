@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import * as A from '../admin/admin.js';
 import { cargarActor } from '../admin/permisos.js';
 import * as P from '../presupuesto/servicio.js';
+import { cargarEvaluacion } from '../presupuesto/evaluacion.js';
 
 export async function sembrarDemo(db) {
   const su = await cargarActor(db, await A.inicializarSuperusuario(db, { correo: 'superusuario@demo.finantia', nombre: 'Superusuario (demo)' }, []));
@@ -19,4 +20,5 @@ export async function sembrarDemo(db) {
   const base = await P.cargarDatosBase(db, adm, { anioBase: 2026, descripcion: 'Base 2026E (Excel v21)', contenido: datos });
   await P.crearEjercicio(db, adm, 2027);
   await P.crearVersion(db, adm, { ejercicio: 2027, nombre: 'Presupuesto 2027 · propuesta inicial', datosBaseId: base });
+  await cargarEvaluacion(db, adm, 2027, JSON.parse(readFileSync(new URL('../../datos/evaluacion2027.json', import.meta.url))));
 }

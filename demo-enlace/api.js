@@ -64,6 +64,8 @@ async function iniciar() {
   S.ejercicios.push({ anio: 2027, estado: 'ABIERTO', creado_en: ahora() });
   reg(2, 'PRESUPUESTO', 'CREAR_EJERCICIO', { entidad: 'ejercicio', entidad_id: '2027' });
   nuevaVersion(2, { ejercicio: 2027, nombre: 'Presupuesto 2027 · propuesta inicial', copiaDe: null, supuestos: {} });
+  const ev = await (await fetch(new URL('../datos/evaluacion2027.json', import.meta.url))).json();
+  S.evaluacion[2027] = { ...validarEvaluacion(ev), cargadoEn: ahora(), cargadoPor: 'Equipo financiero (demo)' };
 }
 
 function nuevaVersion(uid, { ejercicio, nombre, copiaDe, supuestos }) {

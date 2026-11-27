@@ -5,8 +5,8 @@
  *
  *   node herramientas/demo_enlace.mjs CARPETA_DESTINO
  *
- * Solo lleva datos agregados (datos/base2026.json); no lleva nómina por cargo ni la
- * evaluación del equipo: esas se cargan desde la pantalla y no salen del navegador.
+ * Lleva la base 2026E (datos/base2026.json) y la evaluación del equipo 2027 (datos/evaluacion2027.json);
+ * no lleva la nómina por cargo: esa se carga desde la pantalla y no sale del navegador.
  */
 import { mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -43,6 +43,7 @@ escribir('estilos.css', leer('web/estilos.css') + `
 /* Motor, datos agregados y las reglas del servidor que usa la demostración */
 for (const f of readdirSync(join(RAIZ, 'motor'))) if (f.endsWith('.js')) copiar(`motor/${f}`);
 copiar('datos/base2026.json');
+copiar('datos/evaluacion2027.json');
 copiar('servidor/errores.js');
 copiar('servidor/admin/permisos.js');
 copiar('servidor/admin/bitacora.js');

@@ -166,7 +166,9 @@ describe('Evaluación del presupuesto del equipo', () => {
   });
 
   test('solo existe para 2027 y solo con el detalle sensible', async () => {
-    assert.deepEqual(await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.adm })), { evaluacion: null });
+    // Viene cargada desde la instalación (datos/evaluacion2027.json): nadie tiene que volver a subirla
+    const inicial = (await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.adm }))).evaluacion;
+    assert.ok(inicial.rubros.length > 10 && inicial.unidades.length && inicial.partidas.length && inicial.conclusiones.length);
     assert.equal((await pedir(base, 'GET', '/api/presupuesto/ejercicios/2028/evaluacion', { como: U.adm })).status, 404);
     assert.equal((await pedir(base, 'PUT', '/api/presupuesto/ejercicios/2028/evaluacion', { como: U.adm, cuerpo: EV })).status, 404);
     assert.equal((await pedir(base, 'PUT', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.con, cuerpo: EV })).status, 403);
@@ -179,6 +181,6 @@ describe('Evaluación del presupuesto del equipo', () => {
     await ok(pedir(base, 'PUT', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.adm, cuerpo: { ...EV, conclusiones: ['Otra.'] } }));
     assert.deepEqual((await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.su }))).evaluacion.conclusiones, ['Otra.']);
     const bit = (await db.query("SELECT count(*)::int AS n FROM bitacora WHERE accion = 'CARGAR_EVALUACION'")).rows[0].n;
-    assert.equal(bit, 2);
+    assert.equal(bit, 3);
   });
 });
