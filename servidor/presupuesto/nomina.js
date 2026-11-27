@@ -119,7 +119,7 @@ export async function filasDelArchivo(nombre, bytes, inflar) {
 const COL_PERSONA = {
   cedula: COLUMNAS.cedula, nombre: COLUMNAS.nombre, apellidos: COLUMNAS.apellidos,
   centro: ['centro_de_costos', 'centro_costos'], area: ['area', 'rubro'], proceso: ['proceso_item_informe', 'proceso'],
-  nodo: ['nodo', 'sede'], cargo: ['cargo'], cargoBdd: ['cargo_bdd'],
+  nodo: ['nodo', 'sede'], cargo: ['cargo_agrupado', 'cargo'], cargoBdd: ['cargo_bdd'],
   s26: ['salario_mensual_2026', 'salario_2026'], s27: ['salario_mensual_2027', 'salario_2027'],
   factor: ['factor_prestac', 'factor_prestacional'], bolsa: ['bolsa_costo_sin_salario', 'bolsa'],
   fila: ['fila_modelo'], unidad: ['unidad_modelo'], peso: ['peso_persona', 'peso']
@@ -190,7 +190,13 @@ export function interpretarNomina(entrada) {
   const col = {};
   for (const [k, alias] of Object.entries(COLUMNAS)) { const i = enc.findIndex(h => alias.includes(h)); if (i >= 0) col[k] = i; }
   const faltan = OBLIGATORIAS.filter(k => col[k] == null);
-  if (faltan.length) falla(DATOS_INVALIDOS, `Faltan columnas: ${faltan.map(k => COLUMNAS[k][0]).join(', ')}`);
+  if (faltan.length) {
+    const vistas = filas[0].map(x => String(x).trim()).filter(Boolean).slice(0, 30).join(', ');
+    falla(DATOS_INVALIDOS, `No se reconoce el formato del archivo. Columnas encontradas: ${vistas || '(ninguna)'}. `
+      + 'Para el plan por persona, como en la 1.0, suba el Excel del modelo (se lee la hoja Nomina2027) o un libro con sus columnas: '
+      + 'Cédula, Nombre, Área, Proceso, Cargo, Salario mensual 2026, Salario mensual 2027, Factor prestacional, Bolsa, Fila modelo, Unidad modelo y Peso persona. '
+      + `Para la nómina por cargo faltan: ${faltan.map(k => COLUMNAS[k][0]).join(', ')}.`);
+  }
   if (filas.length - 1 > MAX_FILAS) falla(DATOS_INVALIDOS, `El archivo supera ${MAX_FILAS} filas`);
   return filas.slice(1).map((f, i) => {
     const r = i + 2, val = k => (col[k] == null ? '' : f[col[k]] ?? '');

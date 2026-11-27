@@ -86,7 +86,7 @@ describe('Lectura del archivo de nómina', () => {
     assert.ok(!JSON.stringify(f).includes('ana@x.co'), 'el correo no se guarda');
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;cedula;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;<script>;1;0;0;1;1'), /cédula inválida/);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n5.1;A;B;1;0;0;1;1'), /Fila 2: rubro "5.1" desconocido/);
-    assert.throws(() => interpretarNomina('rubro;proceso;cargo\n4.1;A;B'), /Faltan columnas: continuan/);
+    assert.throws(() => interpretarNomina('rubro;proceso;cargo\n4.1;A;B'), /No se reconoce el formato del archivo. Columnas encontradas: rubro, proceso, cargo.*Nomina2027.*por cargo faltan: continuan/s);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;-1;0;0;1;1'), /Fila 2: valor inválido en continuan/);
   });
 });
