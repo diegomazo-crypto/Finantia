@@ -38,7 +38,7 @@ export async function vNomina(c, v, escenario) {
   });
   const tot = sumar(filas);
   const subir = mod.editar ? `<h3>${d.carga ? 'Reemplazar la nómina' : 'Subir la nómina'}</h3>
-    <p class="nota">Un archivo CSV con una fila por cargo y las columnas rubro, proceso, cargo, continuan, nuevos, vacantes, salario_2026 y salario_2027 (salario mensual sumado de las personas del cargo) y costo_anual (pesos). Sin nombres, documentos ni correos de las personas: el servidor rechaza el archivo si los trae. Se guarda cifrado; la carga anterior se retira y su contenido se borra.</p>
+    <p class="nota">Un archivo CSV con una fila por cargo y las columnas rubro, proceso, cargo, continuan, nuevos, vacantes, salario_2026 y salario_2027 (salario mensual sumado de las personas del cargo) y costo_anual (pesos). El costo anual sigue la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. Sin nombres, documentos ni correos de las personas: el servidor rechaza el archivo si los trae. Se guarda cifrado; la carga anterior se retira y su contenido se borra.</p>
     <form class="formfila" id="subir-nomina"><label class="campo">Archivo CSV (máximo 2 MB)<input type="file" name="f" required accept=".csv,.txt"></label>
       <button class="btn primario" type="submit" ${d.activa ? '' : 'disabled'}>Subir</button> <button class="btn" type="button" id="plantilla">Descargar plantilla</button></form>` : '';
   c.innerHTML = `<div class="tarjeta"><h2>Nómina por cargo ${anio}</h2>
