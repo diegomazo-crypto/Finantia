@@ -283,7 +283,14 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
   /** Carga vigente del ejercicio con sus filas descifradas (o null si no hay). Con el plan por persona trae también las personas. */
   async function ver(db, actor, anio) {
     exigirSensible(actor, 'ver');
-    const c = await cargaVigente(db, anio);
+    let c;
+    try { c = await cargaVigente(db, anio); }
+    catch (e) {
+      /* Sin llave o con otra llave: se informa y se deja retirar o reemplazar la carga */
+      const r = (await db.query(`SELECT n.id, n.nombre, n.filas, n.personas, n.costo_total, n.huella, n.subido_en, u.nombre AS subido_por
+          FROM nomina_carga n JOIN usuario u ON u.id = n.subido_por WHERE n.ejercicio = $1 AND n.retirado_en IS NULL ORDER BY n.id DESC LIMIT 1`, [anio])).rows[0];
+      return { activa, carga: { id: Number(r.id), nombre: r.nombre, filas: r.filas, personas: Number(r.personas), costoTotal: Number(r.costo_total), huella: r.huella, subidoEn: r.subido_en, subidoPor: r.subido_por }, filas: [], error: e.message };
+    }
     if (!c) return { activa, carga: null, filas: [] };
     const { r, contenido } = c;
     await registrar(db, { usuarioId: actor.id, modulo: M, accion: 'VER_NOMINA', entidad: 'nomina', entidadId: Number(r.id), detalle: `ejercicio ${anio}` });

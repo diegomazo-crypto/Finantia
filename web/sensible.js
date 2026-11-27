@@ -47,7 +47,8 @@ export async function vNomina(c, v, escenario, ctx = {}) {
       <button class="btn primario" type="submit" ${d.activa ? '' : 'disabled'}>Subir</button> <button class="btn" type="button" id="plantilla">Descargar plantilla</button></form>` : '';
   c.innerHTML = `<div class="tarjeta"><h2>Nómina por cargo ${anio}</h2>
     <p class="nota">Información sensible: la ven solo quienes tienen el detalle de nómina en el módulo Presupuesto. Cada consulta queda en la bitácora. No se envía al asistente de Preguntas.</p>
-    ${d.activa ? '' : '<p class="nota neg">La carga de nómina no está activa en este servidor: falta la llave de cifrado (FINANTIA_LLAVE_NOMINA).</p>'}
+    ${d.activa ? '' : '<p class="nota neg">La carga de nómina no está activa en este servidor: falta la llave de cifrado (variable FINANTIA_LLAVE_NOMINA, 32 bytes en base64). En Render se agrega en Environment del servicio.</p>'}
+    ${d.error ? `<p class="nota neg">${esc(d.error)} ${mod.editar ? 'Retire la carga o suba el archivo de nuevo: la carga nueva la reemplaza.' : ''}</p>` : ''}
     ${d.carga ? `<p class="nota">Archivo vigente: <b>${esc(d.carga.nombre)}</b>, subido por ${esc(d.carga.subidoPor)} el ${fecha(d.carga.subidoEn)}. ${nf0.format(d.carga.filas)} cargos, ${n1(d.carga.personas)} personas, costo anual ${M(d.carga.costoTotal)}.
       ${mod.editar ? ` <button class="btn peligro" type="button" id="retirar-nomina" data-id="${d.carga.id}">Retirar</button>` : ''}</p>` : '<p class="nota">Todavía no hay nómina cargada para este ejercicio.</p>'}
     ${subir}</div>

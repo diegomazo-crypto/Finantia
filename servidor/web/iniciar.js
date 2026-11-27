@@ -15,8 +15,8 @@
  *
  * Usa PostgreSQL si hay DATABASE_URL; si no, una base PGlite guardada en FINANTIA_DIR_DATOS
  * (por defecto ./datos-servidor). La primera vez siembra los usuarios de ejemplo y la versión 1
- * del presupuesto 2027. La nómina por cargo se activa solo si se da FINANTIA_LLAVE_NOMINA (y se
- * sube desde la pantalla, nunca viene cargada). El auxiliar contable por centro de costos y
+ * del presupuesto 2027. La nómina usa FINANTIA_LLAVE_NOMINA o, si no está, una llave propia
+ * guardada en FINANTIA_DIR_DATOS/llave_nomina (se sube desde la pantalla, nunca viene cargada). El auxiliar contable por centro de costos y
  * cuenta y la evaluación del equipo solo se cargan con FINANTIA_PRUEBAS_DETALLE=1.
  */
 import { conectar, desdePGlite, migrar } from '../db/conexion.js';
@@ -40,6 +40,15 @@ if (process.env.FINANTIA_DEMO === '1') {
     db = desdePGlite(new PGlite(process.env.FINANTIA_DIR_DATOS || './datos-servidor'));
   }
   await migrar(db);
+  /* Sin FINANTIA_LLAVE_NOMINA, el sitio de pruebas usa una llave propia guardada junto a los datos (se crea la primera vez) */
+  if (!process.env.FINANTIA_LLAVE_NOMINA) {
+    const fs = await import('node:fs'), { join } = await import('node:path');
+    const dir = process.env.FINANTIA_DIR_DATOS || './datos-servidor', archivo = join(dir, 'llave_nomina');
+    fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(archivo)) fs.writeFileSync(archivo, (await import('node:crypto')).randomBytes(32).toString('base64'), { mode: 0o600 });
+    process.env.FINANTIA_LLAVE_NOMINA = fs.readFileSync(archivo, 'utf8').trim();
+    console.log('Nómina: llave de cifrado del sitio de pruebas en ' + archivo);
+  }
   const hay = (await db.query('SELECT count(*)::int AS n FROM usuario')).rows[0].n;
   if (!hay) {
     const { sembrarDemo } = await import('./demo.js');
@@ -49,5 +58,9 @@ if (process.env.FINANTIA_DEMO === '1') {
 } else {
   db = await conectar();
   await migrar(db);
+}
+{
+  const k = process.env.FINANTIA_LLAVE_NOMINA;
+  if (k && Buffer.from(k, 'base64').length !== 32) console.warn('Aviso: FINANTIA_LLAVE_NOMINA no son 32 bytes en base64; la nómina por cargo queda apagada');
 }
 crearServidor(db).listen(puerto, () => console.log(`Finantia 2.0 en http://localhost:${puerto}`));

@@ -128,10 +128,11 @@ describe('Nómina por cargo por la API', () => {
     assert.ok(!JSON.stringify(v).includes('Cargo de dirección'), 'la nómina por cargo no entra en la versión (ni al asistente)');
   });
 
-  test('con otra llave no se puede leer', async () => {
+  test('con otra llave no se puede leer, pero se informa y se puede reemplazar', async () => {
     const r = await pedir(baseOtra, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm });
-    assert.equal(r.status, 503);
+    assert.equal(r.status, 200);
     assert.match(r.datos.error, /descifrar/);
+    assert.ok(r.datos.carga.id && !r.datos.filas.length, 'muestra la carga vigente sin su contenido');
   });
 
   test('rechaza otro formato y archivos que no son UTF-8', async () => {
