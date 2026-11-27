@@ -2,7 +2,12 @@
 
 Plataforma financiera de la Institución Universitaria CEIPA. Repositorio privado y confidencial.
 
-Este primer paso contiene el **motor de cálculo del módulo Presupuesto**, separado de las pantallas: el mismo cálculo de Finantia Admon 1.0, convertido en un componente sin dependencias y verificado con pruebas contra el Excel `CEIPA_Modelo_Presupuesto2027_v21_202611.xlsx` en los tres escenarios. La base de datos, el módulo de Administración (usuarios, módulos y roles) y las pantallas vienen después.
+Contiene, por ahora sin pantallas:
+
+1. El **motor de cálculo del módulo Presupuesto**: el mismo cálculo de Finantia Admon 1.0, verificado contra el Excel `CEIPA_Modelo_Presupuesto2027_v21_202611.xlsx` en los tres escenarios.
+2. La **base de datos** (PostgreSQL) y la lógica del servidor: el **módulo de Administración** (usuarios, accesos por módulo y rol, aprobaciones configurables, bitácora) y el **ciclo de una versión del presupuesto** (Borrador → En revisión → Aprobada → Reemplazada).
+
+Las pantallas vienen después, sobre esta base.
 
 ## Qué calcula
 
@@ -21,10 +26,11 @@ Las fórmulas se copiaron de Finantia Admon 1.0 sin cambios; solo se reorganizar
 
 ## Uso
 
-Requiere Node.js 20 o superior. No hay dependencias que instalar.
+Requiere Node.js 20 o superior.
 
 ```bash
-npm test          # cuadre con el Excel v21 y equivalencia con el simulador 1.0
+npm install
+npm test          # motor (cuadre con el Excel v21 y el simulador 1.0) y servidor (sobre PostgreSQL en memoria)
 npm run resumen   # cifras clave de los tres escenarios
 ```
 
@@ -37,6 +43,50 @@ m.metricas.npv;         // NPV 2027–2031 al 12 %
 m.caja.saldoFinal;      // saldo de caja a diciembre 2027
 ```
 
+## Base de datos y servidor
+
+| Archivo | Contenido |
+|---|---|
+| `servidor/db/migraciones/001_administracion.sql` | Módulos, usuarios, accesos, configuración de aprobaciones y bitácora (inmutable) |
+| `servidor/db/migraciones/002_presupuesto.sql` | Unidades, plan de cuentas, centros de costo, programas, datos base, ejercicios, versiones, decisiones, resultados y líneas presupuestales |
+| `servidor/db/conexion.js` | Conexión a PostgreSQL (`DATABASE_URL`) y migraciones |
+| `servidor/admin/permisos.js` | Quién puede ver, editar o aprobar en cada módulo |
+| `servidor/admin/admin.js` | Módulo de Administración (solo Superusuario) |
+| `servidor/admin/identidad.js` | Ingreso con Microsoft 365: solo entra quien esté registrado |
+| `servidor/presupuesto/servicio.js` | Ejercicios, versiones, supuestos, aprobación y líneas presupuestales |
+
+### Reglas de permisos
+
+| Rol (por módulo) | Ver | Editar supuestos y enviar | Aprobar o devolver |
+|---|:-:|:-:|:-:|
+| Visualización | Sí | No | No |
+| Administración | Sí | Sí | No |
+| Aprobación | Sí | No | Sí |
+| Superusuario | Sí | Sí | Solo si además tiene el rol Aprobación |
+
+- Microsoft 365 solo verifica la identidad. Los permisos se asignan en el módulo de Administración, que es solo del Superusuario.
+- Cada usuario tiene un rol por módulo. El permiso de detalle sensible (nómina por cargo) se marca aparte.
+- Auditoría contable está en pausa: no admite accesos.
+- Debe quedar siempre al menos un Superusuario activo.
+
+### Ciclo de una versión
+
+1. **Borrador.** Administración crea la versión desde los datos base o copiando otra versión y edita los supuestos. Cada cambio recalcula los tres escenarios y queda en la bitácora con el valor anterior.
+2. **En revisión.** Administración la envía. Ya no se puede editar.
+3. **Aprobada.** Se necesitan las aprobaciones que fije el Superusuario (una por defecto), en orden fijo si así se configura. Quien envió la versión no puede aprobarla. Al completarse, el aprobador elige el escenario oficial (Moderado por defecto) y se generan las líneas presupuestales: renglón × unidad × mes, la base que usará Ejecución presupuestal.
+4. **Reemplazada.** Cuando se aprueba otra versión del mismo ejercicio. Solo hay una aprobada por ejercicio.
+
+Si un aprobador la **devuelve** (con observaciones obligatorias), vuelve a Borrador y la ronda de aprobaciones empieza de nuevo.
+
+### Instalar en un servidor
+
+```bash
+DATABASE_URL=postgres://usuario:clave@servidor/finantia FINANTIA_DOMINIOS=ceipa.edu.co \
+  npm run inicializar -- correo.superusuario@ceipa.edu.co "Nombre Apellido"
+```
+
+Aplica las migraciones, crea el primer Superusuario, carga la base 2026E y abre el ejercicio 2027. El correo del Superusuario se pasa al ejecutar y no queda en el repositorio.
+
 ## Cifras de referencia (millones de COP)
 
 | Escenario | Ingreso neto 2027 | EBITDA 2027 | Resultado 2027 | NPV 2027–2031 | NPV con valor terminal |
@@ -48,6 +98,7 @@ m.caja.saldoFinal;      // saldo de caja a diciembre 2027
 ## Pruebas
 
 - `pruebas/cuadre_excel.test.js`: compara 2.727 cifras con el Excel v21 recalculado en cada escenario (presupuesto por rubro, estado de resultados por unidad, proyección y FCF 2026E–2031, métricas, mensual, flujo de caja y sensibilidad). Tolerancia ±1 millón por cifra; la diferencia máxima observada es menor a 1 peso.
+- `pruebas/servidor.test.js`: permisos, ingreso, Administración, ciclo completo de una versión con una y dos aprobaciones, y bitácora. Corre sobre PGlite (PostgreSQL en memoria); en GitHub también corre contra PostgreSQL 16.
 - `pruebas/equivalencia_simulador.test.js`: 25 combinaciones aleatorias de supuestos contra el motor original de Finantia Admon 1.0, más el tornado, el punto de equilibrio y la programación optimizada tal como los muestran sus pantallas.
 
 Las referencias se regeneran con:

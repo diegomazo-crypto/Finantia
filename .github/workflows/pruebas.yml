@@ -1,4 +1,4 @@
-name: Pruebas del motor
+name: Pruebas
 on:
   push:
   pull_request:
@@ -10,4 +10,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - run: npm test
+  postgres:
+    name: Servidor contra PostgreSQL 16
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: prueba
+          POSTGRES_DB: finantia_prueba
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --test pruebas/servidor.test.js
+        env:
+          FINANTIA_PRUEBA_PG_URL: postgres://postgres:prueba@localhost:5432/finantia_prueba?sslmode=disable
