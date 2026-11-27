@@ -85,6 +85,7 @@ export function rutasApi(db, auth, asistente, nomina) {
       try { nombre = decodeURIComponent(headers['x-nombre'] || ''); } catch { falla(DATOS_INVALIDOS, 'Nombre de archivo inválido'); }
       return { id: await nomina.subir(db, actor, entero(params.anio), { nombre, contenido: body }) };
     }, { crudo: NOMINA_MAX }),
+    ruta('POST', '/api/presupuesto/versiones/:id/nomina', ({ actor, params, body }) => nomina.aplicar(db, actor, entero(params.id), body)),
     ruta('DELETE', '/api/presupuesto/nomina/:id', ({ actor, params }) => nomina.retirar(db, actor, entero(params.id))),
 
     /* Evaluación del presupuesto del equipo (solo 2027; requiere el detalle sensible) */

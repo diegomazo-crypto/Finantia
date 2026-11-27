@@ -32,7 +32,7 @@ app = cambiar(app, 'src="/marca/finantia.png"', 'src="marca/finantia.png"', 'app
 app = cambiar(app, "  if (recargar) location.replace('/#/');\n  location.reload();",
   "  /* En la demostración los datos viven en la página: salir no recarga, para no perderlos. */\n  if (window.FINANTIA_DEMO) { sesion.correo = null; sesion.perfil = null; window.removeEventListener('hashchange', enrutar); history.replaceState(null, '', '#/'); return pantallaIngreso(); }\n  if (recargar) location.replace('/#/');\n  location.reload();", 'app.js');
 escribir('app.js', app);
-copiar('web/sensible.js', 'sensible.js');
+escribir('sensible.js', leer('web/sensible.js').replaceAll("from '/motor/", "from './motor/"));
 copiar('web/planeacion.js', 'planeacion.js');
 copiar('web/xlsx.js', 'xlsx.js');
 copiar('web/marca/finantia.png', 'marca/finantia.png');

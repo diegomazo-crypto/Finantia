@@ -201,6 +201,32 @@ export async function editarSupuestos(db, actor, versionId, cambios) {
   });
 }
 
+/** Versión y sus datos base (para quien calcula algo sobre ella). */
+export async function datosDeVersion(db, versionId) {
+  const version = await leerVersion(db, versionId);
+  const { datos } = await modeloDe(db, version);
+  return { version, datos };
+}
+
+/**
+ * Fija (o quita, con null) la nómina por línea y unidad que sale del plan por persona.
+ * La llama el servicio de nómina, que ya revisó el permiso de detalle sensible. En la bitácora
+ * quedan el modo, los totales de personas por proceso y el costo total: no hay datos de personas.
+ */
+export async function fijarNominaVersion(db, actor, versionId, valor) {
+  exigir(actor, M, 'editar');
+  return db.tx(async t => {
+    const v = await leerVersion(t, versionId, true);
+    if (v.estado !== 'BORRADOR') falla(ESTADO_INVALIDO, `La versión está ${v.estado}; solo se editan borradores`);
+    const { LP: _lp, nominaPlan: antes, ...resto } = v.supuestos || {};
+    const nuevo = valor ? { ...resto, LP: valor.LP, nominaPlan: valor.nominaPlan } : resto;
+    await t.query('UPDATE version SET supuestos = $2 WHERE id = $1', [v.id, JSON.stringify(nuevo)]);
+    await recalcular(t, { ...v, supuestos: nuevo });
+    await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'NOMINA_VERSION', entidad: 'version', entidadId: v.id, antes: antes ?? null, despues: valor ? valor.nominaPlan : null });
+    return valor ? valor.nominaPlan : null;
+  });
+}
+
 export async function enviarARevision(db, actor, versionId) {
   exigir(actor, M, 'editar');
   return db.tx(async t => {

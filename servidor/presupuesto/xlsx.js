@@ -1,5 +1,5 @@
 /**
- * Lector mínimo de Excel (.xlsx) para las cargas: devuelve las filas de la primera hoja.
+ * Lector mínimo de Excel (.xlsx) para las cargas: devuelve las filas de una hoja (la pedida por nombre o la primera).
  *
  * Un .xlsx es un ZIP con XML adentro. Aquí se lee el directorio del ZIP, se descomprimen solo
  * los archivos que hacen falta (libro, relaciones, textos compartidos y la primera hoja) y se
@@ -15,6 +15,9 @@ import { falla, DATOS_INVALIDOS } from '../errores.js';
 
 export const MAX_DESCOMPRIMIDO = 20 * 1024 * 1024;
 const MAX_CELDAS = 200000;
+
+/** Celda con fórmula sin valor calculado: se lee como texto vacío. */
+export const sinValor = ref => ({ sinValor: true, ref, toString: () => '' });
 
 const u16 = (b, i) => b[i] | (b[i + 1] << 8);
 const u32 = (b, i) => (b[i] | (b[i + 1] << 8) | (b[i + 2] << 16) | (b[i + 3] << 24)) >>> 0;
@@ -71,15 +74,19 @@ function columna(ref) {
 /**
  * @param {Uint8Array} b         contenido del .xlsx
  * @param {(datos: Uint8Array, max: number) => Promise<Uint8Array>|Uint8Array} inflar
- * @returns {Promise<Array<Array<string|number>>>} filas de la primera hoja (sin filas vacías)
+ * @param {{ hojas?: string[] }} [op]  hojas preferidas por nombre (sin tildes ni mayúsculas); si no está ninguna, la primera
+ * @returns {Promise<Array<Array<string|number>>>} filas de la hoja (sin filas vacías)
  */
-export async function leerXlsx(b, inflar) {
+export async function leerXlsx(b, inflar, { hojas = [] } = {}) {
   if (!esZip(b)) malo('no es un .xlsx');
   const archivos = directorio(b);
   const libro = await extraer(b, archivos, 'xl/workbook.xml', inflar);
   if (!libro) malo('no trae xl/workbook.xml; ¿es un .xls antiguo?');
-  const hoja1 = libro.match(/<sheet\b[^>]*>/);
-  if (!hoja1) malo('el libro no tiene hojas');
+  const hojasLibro = [...libro.matchAll(/<sheet\b[^>]*>/g)].map(m => m[0]);
+  if (!hojasLibro.length) malo('el libro no tiene hojas');
+  const norm = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const pedida = hojas.map(norm);
+  const hoja1 = [hojasLibro.find(t => pedida.includes(norm(attr(t, 'name')))) || hojasLibro[0]];
   const rid = attr(hoja1[0], 'r:id');
   const rels = (await extraer(b, archivos, 'xl/_rels/workbook.xml.rels', inflar)) || '';
   const rel = [...rels.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(t => attr(t, 'Id') === rid);
@@ -102,7 +109,8 @@ export async function leerXlsx(b, inflar) {
       siguiente = i + 1;
       const t = attr(tag, 't'), v = (cuerpo.match(/<v>([\s\S]*?)<\/v>/) || [])[1];
       let val = '';
-      if ((v == null || v === '') && /<f\b/.test(cuerpo)) falla(DATOS_INVALIDOS, `La celda ${attr(tag, 'r') || ''} tiene una fórmula sin valor calculado. Abra el archivo en Excel, guárdelo y vuelva a subirlo.`);
+      /* Fórmula sin valor calculado: se marca y solo es error si se usa como número (numero() en nomina.js) */
+      if ((v == null || v === '') && t !== 'str' && /<f\b/.test(cuerpo)) { fila[i] = sinValor(attr(tag, 'r') || ''); continue; }
       if (t === 's') val = compartidos[Number(v)] ?? '';
       else if (t === 'inlineStr') val = tes((cuerpo.match(/<is>([\s\S]*?)<\/is>/) || [])[1] || '');
       else if (t === 'str' || t === 'e') val = v == null ? '' : texto(v);

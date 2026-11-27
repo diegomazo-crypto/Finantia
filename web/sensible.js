@@ -5,6 +5,8 @@
  */
 import { $, M, Mn, accion, api, cls, esc, fecha, modulo, nf0, nf1 } from './comun.js';
 import { libroXlsx } from './xlsx.js';
+import { planNomina, MODOS, smmlv2027 } from '/motor/nomina.js';
+import { DEFAULTS } from '/motor/index.js';
 
 const RUBROS_NOMINA = [['PRESTACION', '4.1 Prestación de servicios'], ['ADM_ACADEMICA', '4.2 Administración académica'], ['UNIDADES', '4.3 Unidades de negocio'], ['VENTAS', '4.4 Ventas'],
   ['TECNOLOGIA', '6.1 Tecnología'], ['CORPORATIVO', '6.2 Corporativo'], ['ADMINISTRATIVOS', '6.3 Administrativo'], ['DIRECCION', '6.4 Dirección institucional']];
@@ -21,7 +23,7 @@ const PLANTILLA = [['rubro', 'proceso', 'cargo', 'continuan', 'nuevos', 'vacante
 /* =========================================================
    NÓMINA POR CARGO
    ========================================================= */
-export async function vNomina(c, v, escenario) {
+export async function vNomina(c, v, escenario, ctx = {}) {
   const mod = modulo('PRESUPUESTO'), anio = v.ejercicio;
   let d;
   try { d = await api('GET', `/api/presupuesto/ejercicios/${anio}/nomina`); }
@@ -40,8 +42,8 @@ export async function vNomina(c, v, escenario) {
   });
   const tot = sumar(filas);
   const subir = mod.editar ? `<h3>${d.carga ? 'Reemplazar la nómina' : 'Subir la nómina'}</h3>
-    <p class="nota">Un archivo de Excel (.xlsx, se lee la primera hoja) o CSV con una fila por cargo y las columnas rubro, proceso, cargo, continuan, nuevos, vacantes, salario_2026 y salario_2027 (salario mensual sumado de las personas del cargo) y costo_anual (pesos). El costo anual sigue la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. Puede traer las columnas cedula y nombre (o nombres y apellidos) de cada persona, para la auditoría contable; correos y teléfonos se ignoran. Todo se guarda cifrado y solo lo ve quien tiene el detalle sensible; la carga anterior se retira y su contenido se borra.</p>
-    <form class="formfila" id="subir-nomina"><label class="campo">Archivo Excel o CSV (máximo 2 MB)<input type="file" name="f" required accept=".xlsx,.csv,.txt"></label>
+    <p class="nota"><b>Plan por persona:</b> suba el Excel del modelo (se lee la hoja Nomina2027) o un libro con las mismas columnas (cédula, nombre, área, proceso, cargo, salario mensual 2026 y 2027, factor prestacional, bolsa, fila modelo, unidad modelo y peso persona); el sistema clasifica a cada persona, calcula su costo y permite aplicar la nómina a la versión. <b>O por cargo:</b> un Excel o CSV con una fila por cargo y las columnas rubro, proceso, cargo, continuan, nuevos, vacantes, salario_2026 y salario_2027 (salario mensual sumado de las personas del cargo) y costo_anual (pesos). El costo anual sigue la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. Puede traer las columnas cedula y nombre (o nombres y apellidos) de cada persona, para la auditoría contable; correos y teléfonos se ignoran. Todo se guarda cifrado y solo lo ve quien tiene el detalle sensible; la carga anterior se retira y su contenido se borra.</p>
+    <form class="formfila" id="subir-nomina"><label class="campo">Archivo Excel o CSV (máximo 15 MB)<input type="file" name="f" required accept=".xlsx,.csv,.txt"></label>
       <button class="btn primario" type="submit" ${d.activa ? '' : 'disabled'}>Subir</button> <button class="btn" type="button" id="plantilla">Descargar plantilla</button></form>` : '';
   c.innerHTML = `<div class="tarjeta"><h2>Nómina por cargo ${anio}</h2>
     <p class="nota">Información sensible: la ven solo quienes tienen el detalle de nómina en el módulo Presupuesto. Cada consulta queda en la bitácora. No se envía al asistente de Preguntas.</p>
@@ -49,6 +51,7 @@ export async function vNomina(c, v, escenario) {
     ${d.carga ? `<p class="nota">Archivo vigente: <b>${esc(d.carga.nombre)}</b>, subido por ${esc(d.carga.subidoPor)} el ${fecha(d.carga.subidoEn)}. ${nf0.format(d.carga.filas)} cargos, ${n1(d.carga.personas)} personas, costo anual ${M(d.carga.costoTotal)}.
       ${mod.editar ? ` <button class="btn peligro" type="button" id="retirar-nomina" data-id="${d.carga.id}">Retirar</button>` : ''}</p>` : '<p class="nota">Todavía no hay nómina cargada para este ejercicio.</p>'}
     ${subir}</div>
+    ${d.personas ? '<div class="tarjeta" id="plan-personas"></div>' : ''}
     ${d.carga ? `<div class="tarjeta"><h3>Nómina cargada frente al modelo · ${escenario}</h3>
       <p class="nota">Millones de pesos. La nómina del modelo es la que lleva cada rubro del estado de resultados en esta versión; en 4.1 no incluye la cátedra (${Mn(R.tot.C)} M), que no se carga por cargo.</p>
       <div class="tabla-cont"><table><thead><tr><th>Rubro</th><th>Personas</th><th>Nómina cargada</th><th>Nómina del modelo</th><th>Diferencia</th></tr></thead><tbody>
@@ -63,6 +66,7 @@ export async function vNomina(c, v, escenario) {
           ${p.cargos.map(x => `<tr class="cargo" data-de="${id}" hidden><td>${esc(x.cargo)}${x.nombre || x.cedula ? `<br><small class="nota">${esc([x.nombre, x.cedula && 'C.C. ' + x.cedula].filter(Boolean).join(' · '))}</small>` : ''}</td><td>${n1(x.continuan)}</td><td>${n1(x.nuevos)}</td><td>${n1(x.vacantes)}</td><td>${nf0.format(x.salario2027)}</td><td>${nf0.format(x.costoAnual)}</td></tr>`).join('')}`; }).join('')}`).join('')}
       <tr class="total"><td>Total</td><td>${n1(tot.continuan)}</td><td>${n1(tot.nuevos)}</td><td>${n1(tot.vacantes)}</td><td></td><td>${nf0.format(tot.costo)}</td></tr>
       </tbody></table></div></div>` : ''}`;
+  if (d.personas) await planPersonas($('#plan-personas'), d, v, mod, ctx);
   $('#t-nomina')?.addEventListener('click', e => {
     const b = e.target.closest('[data-abrir]'); if (!b) return;
     const abierto = b.getAttribute('aria-expanded') === 'true';
@@ -78,7 +82,7 @@ export async function vNomina(c, v, escenario) {
   $('#subir-nomina')?.addEventListener('submit', async e => {
     e.preventDefault();
     const archivo = e.target.f.files[0]; if (!archivo) return;
-    if (archivo.size > 2 * 1024 * 1024) return accion(() => Promise.reject(new Error('El archivo supera 2 MB'))).catch(() => {});
+    if (archivo.size > 15 * 1024 * 1024) return accion(() => Promise.reject(new Error("El archivo supera 15 MB"))).catch(() => {});
     try { await accion(() => api('POST', `/api/presupuesto/ejercicios/${anio}/nomina`, archivo, { cab: { 'X-Nombre': encodeURIComponent(archivo.name) } }), 'Nómina cargada y cifrada'); vNomina(c, v, escenario); } catch { /* aviso ya mostrado */ }
   });
 }
@@ -142,3 +146,48 @@ export async function vEvaluacion(c, v, escenario) {
 }
 
 export { NOMBRE_RUBRO };
+
+/* =========================================================
+   PLAN DE NÓMINA POR PERSONA (como la hoja Nomina2027 y Finantia Admon 1.0)
+   ========================================================= */
+async function planPersonas(c, d, v, mod, ctx) {
+  const datos = await api('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`);
+  const actual = v.supuestos?.nominaPlan || null;
+  const st = { modo: actual?.modo || 'plan', personas: { ...(actual?.personas || {}) } };
+  const sm27 = smmlv2027(v.supuestos?.params?.Moderado?.sm ?? DEFAULTS.Moderado.sm);
+  const editable = mod.editar && v.estado === 'BORRADOR';
+  const calc = () => planNomina(d.personas, { REP: datos.REP, nLineas: datos.LP.length, sm27, modo: st.modo, personasPorProceso: st.personas });
+  const pintar = () => {
+    const r = calc();
+    const cnt = k => r.personas.filter(p => p.clase === k).length;
+    const porRubro = RUBROS_NOMINA.map(([k, t]) => ({ k, t, ps: r.procesos.filter(g => g.rubro === k) })).filter(x => x.ps.length);
+    const sumR = (ps, f) => ps.reduce((a, g) => a + g[f], 0);
+    const enVersion = actual ? `Esta versión usa el plan por persona: ${esc((MODOS.find(m => m[0] === actual.modo) || ['', actual.modo])[1].toLowerCase())}, ${Mn(actual.total)} M.` : 'Esta versión usa todavía la nómina de los datos base (plan del Excel v21).';
+    c.innerHTML = `<h3>Plan de nómina por persona</h3>
+      <p class="nota">Como en la hoja Nomina2027 del Excel v21: ${cnt('Continúa')} personas continúan, ${cnt('Nuevo')} cargos nuevos (sin salario 2026), ${cnt('Vacante')} vacantes (sin salario 2027) y ${cnt('Bolsa')} bolsas (costo sin salario). Costo anual con el incremento desde abril, el piso del mínimo y del salario integral desde enero (SMMLV 2027 ${nf0.format(Math.round(sm27))}) y el factor prestacional. ${enVersion}</p>
+      <div class="formfila"><label class="campo">Cargos a costear<select id="pl-modo" ${editable ? '' : 'disabled'}>${MODOS.map(([k, l]) => `<option value="${k}" ${k === st.modo ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        ${editable ? `<button class="btn primario" type="button" id="pl-aplicar">Aplicar a la versión</button>${actual ? ' <button class="btn" type="button" id="pl-quitar">Volver a la nómina de los datos base</button>' : ''}` : ''}</div>
+      <p class="nota">Costo del plan: ${Mn(r.totalPlan)} M · con los cargos a costear y las personas de cada proceso: <b>${Mn(r.total)} M</b> (${r.total >= r.totalPlan ? '+' : ''}${Mn(r.total - r.totalPlan)} M). Las vacantes se costean al costo promedio por persona de su proceso. Cambie el total de personas de un proceso para costear más o menos personas.</p>
+      <div class="tabla-cont"><table id="t-plan"><thead><tr><th>Rubro · proceso</th><th>Continúan</th><th>Nuevos</th><th>Vacantes</th><th>Bolsas</th><th>Total personas</th><th>Factor</th><th>Costo plan</th><th>Costo ajustado</th></tr></thead><tbody>
+      ${porRubro.map(x => `<tr class="sub"><td>${esc(x.t)}</td><td>${n1(sumR(x.ps, 'cont'))}</td><td>${n1(sumR(x.ps, 'nuevos'))}</td><td>${n1(sumR(x.ps, 'vac'))}</td><td>${n1(sumR(x.ps, 'bolsas'))}</td><td>${n1(sumR(x.ps, 'personas'))}</td><td></td><td>${Mn(sumR(x.ps, 'costoPlan'))}</td><td>${Mn(sumR(x.ps, 'costo'))}</td></tr>
+        ${x.ps.map(g => `<tr class="det"><td>${esc(g.proceso)}</td><td>${n1(g.cont)}</td><td>${n1(g.nuevos)}</td><td>${n1(g.vac)}</td><td>${n1(g.bolsas)}</td>
+          <td>${editable ? `<input type="number" min="0" step="0.5" class="pl-pers" data-proc="${esc(g.proceso)}" value="${g.personas}" aria-label="Total personas de ${esc(g.proceso)}">` : n1(g.personas)}</td>
+          <td>${g.factor.toFixed(3)}</td><td>${Mn(g.costoPlan)}</td><td class="${Math.abs(g.costo - g.costoPlan) > 5e5 ? 'chg' : ''}">${Mn(g.costo)}</td></tr>`).join('')}`).join('')}
+      <tr class="total"><td>Total</td><td>${n1(sumR(r.procesos, 'cont'))}</td><td>${n1(sumR(r.procesos, 'nuevos'))}</td><td>${n1(sumR(r.procesos, 'vac'))}</td><td>${n1(sumR(r.procesos, 'bolsas'))}</td><td>${n1(sumR(r.procesos, 'personas'))}</td><td></td><td>${Mn(r.totalPlan)}</td><td>${Mn(r.total)}</td></tr>
+      </tbody></table></div>`;
+    $('#pl-modo')?.addEventListener('change', e => { st.modo = e.target.value; pintar(); });
+    c.querySelectorAll('.pl-pers').forEach(i => i.addEventListener('change', () => {
+      const g = calc().procesos.find(x => x.proceso === i.dataset.proc), n = Number(i.value);
+      if (!Number.isFinite(n) || n < 0) return;
+      if (Math.abs(n - g.tot) < 1e-9) delete st.personas[g.proceso]; else st.personas[g.proceso] = n;
+      pintar();
+    }));
+    $('#pl-aplicar')?.addEventListener('click', async () => {
+      try { await accion(() => api('POST', `/api/presupuesto/versiones/${v.id}/nomina`, { modo: st.modo, personas: st.personas }), 'Nómina aplicada y versión recalculada'); ctx.recargar?.(); } catch { /* aviso ya mostrado */ }
+    });
+    $('#pl-quitar')?.addEventListener('click', async () => {
+      try { await accion(() => api('POST', `/api/presupuesto/versiones/${v.id}/nomina`, { modo: null }), 'La versión vuelve a la nómina de los datos base'); ctx.recargar?.(); } catch { /* aviso ya mostrado */ }
+    });
+  };
+  pintar();
+}

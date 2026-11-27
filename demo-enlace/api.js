@@ -11,7 +11,8 @@ import { crearModelo, DEFAULTS, ESCS, FIXED, lineasMensuales } from '../motor/in
 import { puede, veDetalleSensible, ROLES } from '../servidor/admin/permisos.js';
 import { ErrorFinantia } from '../servidor/errores.js';
 import { validarSupuestos, sinAuxiliar } from '../servidor/presupuesto/servicio.js';
-import { filasDelArchivo, interpretarNomina } from '../servidor/presupuesto/nomina.js';
+import { filasDelArchivo, interpretarNomina, encabezadoPersonas, interpretarPersonas, filasDePersonas } from '../servidor/presupuesto/nomina.js';
+import { planNomina, smmlv2027, MODOS } from '../motor/nomina.js';
 import { versionPorDefecto, soloFlujo } from '../servidor/planeacion/servicio.js';
 import { validarEvaluacion, EJERCICIOS as EJ_EVALUACION } from '../servidor/presupuesto/evaluacion.js';
 
@@ -251,21 +252,42 @@ ruta('GET', '/api/presupuesto/ejercicios/:anio/nomina', ({ a, p }) => {
   const c = S.nomina.find(n => n.ejercicio === Number(p.anio) && !n.retirado);
   if (!c) return { activa: true, carga: null, filas: [] };
   reg(a.id, 'PRESUPUESTO', 'VER_NOMINA', { entidad: 'nomina', entidad_id: String(c.id) });
-  return { activa: true, carga: c.carga, filas: c.filas };
+  return { activa: true, carga: c.carga, filas: c.filas, ...(c.personas ? { personas: c.personas } : {}) };
+});
+const opPlan = (sm = DEFAULTS.Moderado.sm) => ({ REP: S.datos.REP, nLineas: S.datos.LP.length, sm27: smmlv2027(sm) });
+ruta('POST', '/api/presupuesto/versiones/:id/nomina', ({ a, p, b }) => {
+  sensible(a, 'editar', 'la nómina por cargo');
+  const v = S.versiones.find(x => x.id === Number(p.id)) || falla('NO_ENCONTRADO', `No existe la versión ${p.id}`);
+  if (v.estado !== 'BORRADOR') falla('ESTADO_INVALIDO', `La versión está ${v.estado}; solo se editan borradores`);
+  const { LP: _lp, nominaPlan: antes, ...resto } = v.supuestos || {};
+  if (b.modo === null) { v.supuestos = resto; recalcular(v); reg(a.id, 'PRESUPUESTO', 'NOMINA_VERSION', { entidad: 'version', entidad_id: String(v.id), antes }); return null; }
+  if (!MODOS.some(([m]) => m === b.modo)) falla('DATOS_INVALIDOS', `Modo desconocido: ${b.modo}`);
+  const c = S.nomina.find(n => n.ejercicio === v.ejercicio && !n.retirado);
+  if (!c || !c.personas) falla('ESTADO_INVALIDO', 'Para aplicar la nómina a la versión, suba primero el plan por persona del ejercicio');
+  const personas = b.personas || {};
+  const plan = planNomina(c.personas, { ...opPlan(v.supuestos?.params?.Moderado?.sm), modo: b.modo, personasPorProceso: personas });
+  const nominaPlan = { cargaId: c.id, huella: '—', modo: b.modo, personas, total: plan.total };
+  v.supuestos = { ...resto, LP: plan.LP, nominaPlan }; recalcular(v);
+  reg(a.id, 'PRESUPUESTO', 'NOMINA_VERSION', { entidad: 'version', entidad_id: String(v.id), antes, despues: nominaPlan });
+  return nominaPlan;
 });
 ruta('POST', '/api/presupuesto/ejercicios/:anio/nomina', async ({ a, p, b, cab }) => {
   sensible(a, 'editar', 'la nómina por cargo');
   const nombre = decodeURIComponent(cab['X-Nombre'] || '');
   const inflar = async d => new Uint8Array(await new Response(new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
-  const filas = interpretarNomina(await filasDelArchivo(nombre, new Uint8Array(await b.arrayBuffer()), inflar));
-  S.nomina.filter(n => n.ejercicio === Number(p.anio)).forEach(n => { n.retirado = true; n.filas = []; });
+  const celdas = await filasDelArchivo(nombre, new Uint8Array(await b.arrayBuffer()), inflar);
+  let filas, personas = null;
+  if (encabezadoPersonas(celdas) >= 0) { personas = interpretarPersonas(celdas, S.datos.LP.length); filas = filasDePersonas(planNomina(personas, opPlan())); }
+  else filas = interpretarNomina(celdas);
+  S.nomina.filter(n => n.ejercicio === Number(p.anio)).forEach(n => { n.retirado = true; n.filas = []; n.personas = null; });
   const id = S.nomina.length + 1;
   const carga = { id, nombre, filas: filas.length, personas: filas.reduce((s, f) => s + f.continuan + f.nuevos + f.vacantes, 0), costoTotal: filas.reduce((s, f) => s + f.costoAnual, 0), huella: '—', subidoEn: ahora(), subidoPor: a.nombre };
-  S.nomina.push({ id, ejercicio: Number(p.anio), carga, filas });
+  carga.formato = personas ? 'personas' : 'cargos'; if (personas) carga.filas = personas.length;
+  S.nomina.push({ id, ejercicio: Number(p.anio), carga, filas, personas });
   reg(a.id, 'PRESUPUESTO', 'SUBIR_NOMINA', { entidad: 'nomina', entidad_id: String(id), despues: { filas: filas.length, costoTotal: carga.costoTotal } });
   return { id };
 });
-ruta('DELETE', '/api/presupuesto/nomina/:id', ({ a, p }) => { sensible(a, 'editar', 'la nómina por cargo'); const c = S.nomina.find(n => n.id === Number(p.id) && !n.retirado) || falla('NO_ENCONTRADO', 'La carga de nómina no existe o ya fue retirada'); c.retirado = true; c.filas = []; reg(a.id, 'PRESUPUESTO', 'RETIRAR_NOMINA', { entidad: 'nomina', entidad_id: p.id }); });
+ruta('DELETE', '/api/presupuesto/nomina/:id', ({ a, p }) => { sensible(a, 'editar', 'la nómina por cargo'); const c = S.nomina.find(n => n.id === Number(p.id) && !n.retirado) || falla('NO_ENCONTRADO', 'La carga de nómina no existe o ya fue retirada'); c.retirado = true; c.filas = []; c.personas = null; reg(a.id, 'PRESUPUESTO', 'RETIRAR_NOMINA', { entidad: 'nomina', entidad_id: p.id }); });
 
 /* Evaluación del equipo (solo 2027) */
 ruta('GET', '/api/presupuesto/ejercicios/:anio/evaluacion', ({ a, p }) => {

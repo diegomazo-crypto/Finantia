@@ -177,3 +177,5 @@ svg.grafico .ref { stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 5 4
 .leyenda b { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px }
 .leyenda b.pos { background: var(--pos) } .leyenda b.neg { background: var(--neg) } .leyenda b.linea { background: var(--accent) } .leyenda b.ref { background: var(--mark) }
 tr.memo td { color: var(--muted); font-style: italic }
+td.chg{font-weight:600}
+input.pl-pers{width:5.5em}

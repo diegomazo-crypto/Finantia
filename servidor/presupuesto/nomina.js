@@ -16,11 +16,17 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { inflateRawSync } from 'node:zlib';
 import { exigir, veDetalleSensible } from '../admin/permisos.js';
 import { registrar } from '../admin/bitacora.js';
-import { falla, DATOS_INVALIDOS, NO_AUTORIZADO, NO_DISPONIBLE, NO_ENCONTRADO } from '../errores.js';
+import { falla, DATOS_INVALIDOS, ESTADO_INVALIDO, NO_AUTORIZADO, NO_DISPONIBLE, NO_ENCONTRADO } from '../errores.js';
+/* Datos base de la instalación (asignación REPARTO por línea); se cargan al primer uso para que este módulo sirva también en el navegador */
+let base0 = null;
+const baseDatos = async () => (base0 ??= JSON.parse((await import('node:fs')).readFileSync(new URL('../../datos/base2026.json', import.meta.url))));
 import { esZip, leerXlsx } from './xlsx.js';
+import { planNomina, revisarAsignacion, smmlv2027, MODOS } from '../../motor/nomina.js';
+import { DEFAULTS } from '../../motor/index.js';
+import { fijarNominaVersion, datosDeVersion } from './servicio.js';
 
 const M = 'PRESUPUESTO';
-export const TAMANO_MAXIMO = 2 * 1024 * 1024;
+export const TAMANO_MAXIMO = 15 * 1024 * 1024; /* el Excel del modelo completo pesa unos 3 MB */
 const MAX_FILAS = 3000;
 
 /** Rubros del estado de resultados que llevan nómina, con su numeral en el EERR de CEIPA. */
@@ -71,6 +77,7 @@ export function leerCsv(texto) {
 /** Número en formato colombiano ($1.234.567,5) o con punto decimal (1234567.5). */
 export function numero(s) {
   if (typeof s === 'number') return s; /* celda numérica de Excel */
+  if (s && s.sinValor) falla(DATOS_INVALIDOS, `La celda ${s.ref} tiene una fórmula sin valor calculado. Abra el archivo en Excel, guárdelo y vuelva a subirlo.`);
   let x = String(s ?? '').replace(/[$\s ]/g, '');
   if (!x || x === '-') return 0;
   const neg = /^\(.*\)$/.test(x); if (neg) x = x.slice(1, -1);
@@ -81,8 +88,14 @@ export function numero(s) {
   return Number.isFinite(n) ? (neg ? -n : n) : NaN;
 }
 
+const AREAS = {
+  costos_de_prestacion_del_servicio: 'PRESTACION', costos_de_prestacion_de_servicios: 'PRESTACION', prestacion: 'PRESTACION',
+  administracion_academica: 'ADM_ACADEMICA', unidades_de_negocio: 'UNIDADES', ventas: 'VENTAS', tecnologia: 'TECNOLOGIA',
+  corporativo: 'CORPORATIVO', administrativos: 'ADMINISTRATIVOS', direccion_institucional: 'DIRECCION'
+};
 function rubroDe(v) {
   const s = String(v ?? '').trim();
+  if (AREAS[normal(s)]) return AREAS[normal(s)];
   const num = s.match(/^(\d\.\d)\b/);
   if (num && POR_NUMERAL[num[1]]) return POR_NUMERAL[num[1]];
   const k = normal(s).toUpperCase();
@@ -94,12 +107,79 @@ function rubroDe(v) {
  * `inflar` descomprime deflate sin encabezado (en el servidor, node:zlib; en la demostración, el navegador).
  */
 export async function filasDelArchivo(nombre, bytes, inflar) {
-  if (/\.xlsx$/i.test(nombre)) return leerXlsx(bytes, inflar);
+  if (/\.xlsx$/i.test(nombre)) return leerXlsx(bytes, inflar, { hojas: ['Nomina2027', 'Nomina', 'Nomina por persona', 'Plan por persona'] });
   if (!/\.(csv|txt)$/i.test(nombre)) falla(DATOS_INVALIDOS, 'Suba la nómina como Excel (.xlsx) o CSV');
   if (esZip(bytes)) falla(DATOS_INVALIDOS, 'El archivo parece un Excel con otra extensión: guárdelo como .xlsx');
   const texto = new TextDecoder().decode(bytes);
   if (texto.includes('\uFFFD')) falla(DATOS_INVALIDOS, 'El archivo no está en UTF-8. En Excel use "CSV UTF-8 (delimitado por comas)", o suba el .xlsx.');
   return leerCsv(texto);
+}
+
+/* Plan por persona: columnas de la hoja Nomina2027 del Excel v21 (fila 59) */
+const COL_PERSONA = {
+  cedula: COLUMNAS.cedula, nombre: COLUMNAS.nombre, apellidos: COLUMNAS.apellidos,
+  centro: ['centro_de_costos', 'centro_costos'], area: ['area', 'rubro'], proceso: ['proceso_item_informe', 'proceso'],
+  nodo: ['nodo', 'sede'], cargo: ['cargo'], cargoBdd: ['cargo_bdd'],
+  s26: ['salario_mensual_2026', 'salario_2026'], s27: ['salario_mensual_2027', 'salario_2027'],
+  factor: ['factor_prestac', 'factor_prestacional'], bolsa: ['bolsa_costo_sin_salario', 'bolsa'],
+  fila: ['fila_modelo'], unidad: ['unidad_modelo'], peso: ['peso_persona', 'peso']
+};
+const OBLIG_PERSONA = ['area', 'proceso', 's27', 'factor', 'fila', 'unidad'];
+
+/** ¿Las filas traen el plan por persona? Devuelve el índice de la fila de encabezados o -1. */
+export function encabezadoPersonas(filas) {
+  return filas.slice(0, 120).findIndex(f => f.some(x => normal(x) === 'fila_modelo') && f.some(x => COL_PERSONA.s27.includes(normal(x))));
+}
+
+/** Plan por persona → personas validadas. Se detiene en la primera fila sin área (notas al pie). */
+export function interpretarPersonas(filas, nLineas = null) {
+  const h = encabezadoPersonas(filas);
+  if (h < 0) falla(DATOS_INVALIDOS, 'No se encontró el encabezado del plan por persona (columnas "Fila modelo" y "Salario mensual 2027")');
+  const enc = filas[h].map(normal), col = {};
+  for (const [k, alias] of Object.entries(COL_PERSONA)) { const i = enc.findIndex(x => alias.includes(x)); if (i >= 0) col[k] = i; }
+  const faltan = OBLIG_PERSONA.filter(k => col[k] == null);
+  if (faltan.length) falla(DATOS_INVALIDOS, `Faltan columnas del plan por persona: ${faltan.map(k => COL_PERSONA[k][0]).join(', ')}`);
+  const out = [];
+  for (let i = h + 1; i < filas.length; i++) {
+    const f = filas[i], r = i + 1, val = k => (col[k] == null ? '' : f[col[k]] ?? '');
+    const txt = k => String(val(k)).trim();
+    if (!txt('area')) break;
+    if (out.length >= MAX_FILAS) falla(DATOS_INVALIDOS, `El archivo supera ${MAX_FILAS} personas`);
+    const rubro = rubroDe(val('area'));
+    if (!rubro) falla(DATOS_INVALIDOS, `Fila ${r}: área "${txt('area')}" desconocida`);
+    const num = (k, opcional) => {
+      if (opcional && txt(k) === '' && !val(k)?.sinValor) return null;
+      const x = numero(val(k));
+      if (!Number.isFinite(x) || x < 0) falla(DATOS_INVALIDOS, `Fila ${r}: valor inválido en ${COL_PERSONA[k][0]} ("${val(k)}")`);
+      return x;
+    };
+    const p = {
+      rubro, area: txt('area').slice(0, 80), proceso: txt('proceso').slice(0, 120), centro: txt('centro').slice(0, 120), nodo: txt('nodo').slice(0, 60),
+      cargo: (txt('cargo') || txt('cargoBdd') || 'Sin cargo').slice(0, 120),
+      s26: num('s26', true), s27: num('s27', true) ?? 0, factor: num('factor'), bolsa: num('bolsa', true),
+      fila: num('fila'), unidad: txt('unidad').toUpperCase(), peso: num('peso', true) ?? 1
+    };
+    if (!p.proceso) falla(DATOS_INVALIDOS, `Fila ${r}: falta el proceso`);
+    const ced = txt('cedula').replace(/[.\s]/g, '');
+    if (ced && !/^[0-9A-Za-z-]{3,20}$/.test(ced)) falla(DATOS_INVALIDOS, `Fila ${r}: cédula inválida ("${txt('cedula')}")`);
+    if (ced) p.cedula = ced;
+    const nom = [txt('nombre'), txt('apellidos')].filter(Boolean).join(' ').slice(0, 160);
+    if (nom) p.nombre = nom;
+    out.push(p);
+  }
+  if (!out.length) falla(DATOS_INVALIDOS, 'El plan por persona no tiene filas');
+  if (nLineas) { const e = revisarAsignacion(out, nLineas); if (e) falla(DATOS_INVALIDOS, e); }
+  return out;
+}
+
+/** Vista por cargo (la de la pantalla) del plan por persona, con su clase y costo. */
+export function filasDePersonas(plan) {
+  return plan.personas.map(p => ({
+    rubro: p.rubro, proceso: p.proceso, cargo: p.cargo, clase: p.clase,
+    continuan: p.clase === 'Continúa' ? p.peso : 0, nuevos: p.clase === 'Nuevo' ? p.peso : 0, vacantes: p.clase === 'Vacante' ? 1 : 0,
+    salario2026: p.s26 ?? 0, salario2027: p.s27, costoAnual: p.costoAjustado,
+    ...(p.cedula ? { cedula: p.cedula } : {}), ...(p.nombre ? { nombre: p.nombre } : {})
+  }));
 }
 
 /** Convierte el archivo (texto CSV o filas ya leídas) en filas validadas. Lanza DATOS_INVALIDOS con el renglón que falla. */
@@ -150,13 +230,21 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
     if (!veDetalleSensible(actor, M)) falla(NO_AUTORIZADO, 'Sin permiso para ver la nómina por cargo (requiere el detalle sensible del módulo Presupuesto)');
   };
   const aad = (anio, id) => Buffer.from(`finantia:nomina:${anio}:${id}`);
+  /* Vista de la carga: con los supuestos del Excel (SMMLV 2027 Moderado, solo cargos nuevos) y la asignación de los datos base */
+  const opPlan = async () => { const b = await baseDatos(); return { REP: b.REP, nLineas: b.LP.length, sm27: smmlv2027(DEFAULTS.Moderado.sm) }; };
 
   async function subir(db, actor, anio, { nombre, contenido }) {
     exigirSensible(actor, 'editar');
     exigirLlave();
     const n = String(nombre || '').normalize('NFC').replace(/[\\/\x00-\x1f"<>|:*?]/g, '_').trim().slice(0, 180);
     if (!Buffer.isBuffer(contenido) || !contenido.length) falla(DATOS_INVALIDOS, 'El archivo está vacío');
-    const filas = interpretarNomina(await filasDelArchivo(n, contenido, (d, max) => inflateRawSync(d, { maxOutputLength: max })));
+    const celdas = await filasDelArchivo(n, contenido, (d, max) => inflateRawSync(d, { maxOutputLength: max }));
+    let filas, guardar;
+    if (encabezadoPersonas(celdas) >= 0) {
+      const op = await opPlan(), pers = interpretarPersonas(celdas, op.nLineas);
+      guardar = { formato: 'personas', personas: pers };
+      filas = filasDePersonas(planNomina(pers, op));
+    } else { filas = interpretarNomina(celdas); guardar = filas; }
     const personas = filas.reduce((s, f) => s + f.continuan + f.nuevos + f.vacantes, 0);
     const costo = filas.reduce((s, f) => s + f.costoAnual, 0);
     const huella = createHash('sha256').update(contenido).digest('hex');
@@ -166,10 +254,10 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
       if (anteriores.length) await t.query('UPDATE nomina_carga SET retirado_en = now(), retirado_por = $2, cifrado = NULL, iv = NULL, etiqueta = NULL WHERE id = ANY($1::bigint[])', [anteriores, actor.id]);
       const id = Number((await t.query(
         'INSERT INTO nomina_carga (ejercicio, nombre, filas, personas, costo_total, huella, subido_por) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-        [anio, n, filas.length, personas, costo, huella, actor.id])).rows[0].id);
+        [anio, n, guardar.formato ? guardar.personas.length : filas.length, personas, costo, huella, actor.id])).rows[0].id);
       const iv = randomBytes(12), c = createCipheriv('aes-256-gcm', k, iv);
       c.setAAD(aad(anio, id));
-      const cifrado = Buffer.concat([c.update(JSON.stringify(filas), 'utf8'), c.final()]);
+      const cifrado = Buffer.concat([c.update(JSON.stringify(guardar), 'utf8'), c.final()]);
       await t.query('UPDATE nomina_carga SET cifrado = $2, iv = $3, etiqueta = $4 WHERE id = $1', [id, cifrado, iv, c.getAuthTag()]);
       await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'SUBIR_NOMINA', entidad: 'nomina', entidadId: id,
         despues: { ejercicio: anio, nombre: n, filas: filas.length, personas, costoTotal: costo, huella, reemplaza: anteriores } });
@@ -177,21 +265,52 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
     });
   }
 
-  /** Carga vigente del ejercicio con sus filas descifradas (o null si no hay). */
-  async function ver(db, actor, anio) {
-    exigirSensible(actor, 'ver');
+  /** Carga vigente del ejercicio, descifrada (o null si no hay). */
+  async function cargaVigente(db, anio) {
     const r = (await db.query(`SELECT n.id, n.nombre, n.filas, n.personas, n.costo_total, n.huella, n.subido_en, n.cifrado, n.iv, n.etiqueta, u.nombre AS subido_por
         FROM nomina_carga n JOIN usuario u ON u.id = n.subido_por WHERE n.ejercicio = $1 AND n.retirado_en IS NULL ORDER BY n.id DESC LIMIT 1`, [anio])).rows[0];
-    if (!r) return { activa, carga: null, filas: [] };
+    if (!r) return null;
     exigirLlave();
-    let filas;
+    let contenido;
     try {
       const d = createDecipheriv('aes-256-gcm', k, Buffer.from(r.iv));
       d.setAAD(aad(anio, Number(r.id))); d.setAuthTag(Buffer.from(r.etiqueta));
-      filas = JSON.parse(Buffer.concat([d.update(Buffer.from(r.cifrado)), d.final()]).toString('utf8'));
+      contenido = JSON.parse(Buffer.concat([d.update(Buffer.from(r.cifrado)), d.final()]).toString('utf8'));
     } catch { falla(NO_DISPONIBLE, 'No se pudo descifrar la nómina: la llave del servidor cambió o el contenido fue alterado.'); }
+    return { r, contenido };
+  }
+
+  /** Carga vigente del ejercicio con sus filas descifradas (o null si no hay). Con el plan por persona trae también las personas. */
+  async function ver(db, actor, anio) {
+    exigirSensible(actor, 'ver');
+    const c = await cargaVigente(db, anio);
+    if (!c) return { activa, carga: null, filas: [] };
+    const { r, contenido } = c;
     await registrar(db, { usuarioId: actor.id, modulo: M, accion: 'VER_NOMINA', entidad: 'nomina', entidadId: Number(r.id), detalle: `ejercicio ${anio}` });
-    return { activa, carga: { id: Number(r.id), nombre: r.nombre, filas: r.filas, personas: Number(r.personas), costoTotal: Number(r.costo_total), huella: r.huella, subidoEn: r.subido_en, subidoPor: r.subido_por }, filas };
+    const carga = { id: Number(r.id), nombre: r.nombre, filas: r.filas, personas: Number(r.personas), costoTotal: Number(r.costo_total), huella: r.huella, subidoEn: r.subido_en, subidoPor: r.subido_por, formato: contenido.formato || 'cargos' };
+    if (contenido.formato === 'personas') return { activa, carga, filas: filasDePersonas(planNomina(contenido.personas, await opPlan())), personas: contenido.personas };
+    return { activa, carga, filas: contenido };
+  }
+
+  /**
+   * Aplica el plan por persona a una versión en borrador: calcula la nómina por línea y unidad con
+   * los cargos a costear y las personas por proceso, y la versión se recalcula con ella.
+   * modo = null quita el plan y la versión vuelve a la nómina de los datos base.
+   */
+  async function aplicar(db, actor, versionId, { modo = 'plan', personas = {} } = {}) {
+    exigirSensible(actor, 'editar');
+    if (modo !== null && !MODOS.some(([m]) => m === modo)) falla(DATOS_INVALIDOS, `Modo desconocido: ${modo}`);
+    if (!personas || typeof personas !== 'object' || Array.isArray(personas)) falla(DATOS_INVALIDOS, 'personas debe ser un objeto { proceso: total }');
+    for (const [p, n] of Object.entries(personas)) if (typeof n !== 'number' || !Number.isFinite(n) || n < 0 || n > 10000) falla(DATOS_INVALIDOS, `Total de personas inválido en ${p}`);
+    const { version, datos } = await datosDeVersion(db, versionId);
+    if (modo === null) return fijarNominaVersion(db, actor, versionId, null);
+    const c = await cargaVigente(db, version.ejercicio);
+    if (!c || c.contenido.formato !== 'personas') falla(ESTADO_INVALIDO, 'Para aplicar la nómina a la versión, suba primero el plan por persona del ejercicio');
+    const procesos = new Set(c.contenido.personas.map(p => p.proceso));
+    for (const p of Object.keys(personas)) if (!procesos.has(p)) falla(DATOS_INVALIDOS, `Proceso desconocido: ${p}`);
+    const sm = version.supuestos?.params?.Moderado?.sm ?? DEFAULTS.Moderado.sm;
+    const plan = planNomina(c.contenido.personas, { REP: datos.REP, nLineas: datos.LP.length, sm27: smmlv2027(sm), modo, personasPorProceso: personas });
+    return fijarNominaVersion(db, actor, versionId, { LP: plan.LP, nominaPlan: { cargaId: Number(c.r.id), huella: c.r.huella, modo, personas, total: plan.total } });
   }
 
   /** Retira la carga y borra su contenido cifrado (solo quedan los totales en la bitácora). */
@@ -205,5 +324,5 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
     });
   }
 
-  return { activa, subir, ver, retirar };
+  return { activa, subir, ver, retirar, aplicar };
 }
