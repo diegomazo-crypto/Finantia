@@ -23,7 +23,7 @@ import { falla, DATOS_INVALIDOS, NO_ENCONTRADO, NO_AUTORIZADO } from '../errores
 import { leerXlsx, esZip } from '../presupuesto/xlsx.js';
 import { leerCsv } from '../presupuesto/nomina.js';
 import { leerBalance, leerComparativo, esHojaComparativo, MESES_LARGOS } from './lectura.js';
-import { mapaDesdeBase, mapaDesdeArchivo, clasificarBalance, participacion, mensualizar, completarConSaldoAnterior } from '../../motor/ejecucion.js';
+import { mapaDesdeBase, clasificarBalance, participacion, mensualizar, completarConSaldoAnterior } from '../../motor/ejecucion.js';
 
 const M = 'EJECUCION';
 export const TAMANO_MAXIMO = 25 * 1024 * 1024; /* el informe mensual completo pesa unos 7 MB */
@@ -68,13 +68,19 @@ async function baseDelAnio(db, anio) {
 }
 
 const mapas = new Map();
-let archivoMapa;
-const leerMapa = () => { if (archivoMapa === undefined) { try { archivoMapa = JSON.parse(readFileSync(new URL('../../datos/ejecucion_mapa.json', import.meta.url))); } catch { archivoMapa = null; } } return archivoMapa; };
-/** Reparto cuenta y centro de costos → línea y unidad: el de los datos base o, si se cargaron sin auxiliar, el de datos/ejecucion_mapa.json. */
+let base0;
+/** Base 2026 de la instalación (datos/base2026.json), que trae el reparto del auxiliar. */
+const baseInstalada = () => { if (base0 === undefined) { try { base0 = JSON.parse(readFileSync(new URL('../../datos/base2026.json', import.meta.url))); } catch { base0 = null; } } return base0; };
+/**
+ * Reparto cuenta y centro de costos → línea y unidad: el de los datos base o, si se cargaron sin el
+ * auxiliar (sitio de pruebas), el de la base 2026 de la instalación cuando las líneas coinciden.
+ */
 const mapaDe = datos => {
-  if (!mapas.has(datos)) { if (mapas.size > 4) mapas.clear(); const m = mapaDesdeBase(datos);
-    if (m && leerMapa()?.esicCuenta) m.esicCuenta = new Map(leerMapa().esicCuenta);
-    mapas.set(datos, m || mapaDesdeArchivo(leerMapa(), datos)); }
+  if (!mapas.has(datos)) {
+    if (mapas.size > 4) mapas.clear();
+    const f = baseInstalada(), igual = f && f.LN?.length === datos.LN?.length && f.LN.every((n, i) => n === datos.LN[i]);
+    mapas.set(datos, mapaDesdeBase(datos) || (igual ? mapaDesdeBase(f) : null));
+  }
   return mapas.get(datos);
 };
 
@@ -82,7 +88,7 @@ const mapaDe = datos => {
 async function realDelAnio(db, anio, base, datos) {
   const filas = (await db.query(`SELECT m.mes, m.nombre, m.forma, m.con_cc, m.filas, m.cargado_en, u.nombre AS por FROM ejecucion_mes m JOIN usuario u ON u.id = m.cargado_por WHERE m.anio = $1 ORDER BY m.mes`, [anio])).rows;
   const mapa = mapaDe(datos);
-  if (!mapa) falla(NO_ENCONTRADO, 'No hay reparto de cuentas y centros de costos para estos datos base (ni en los datos ni en datos/ejecucion_mapa.json), que se necesita para clasificar el balance');
+  if (!mapa) falla(NO_ENCONTRADO, 'No hay reparto de cuentas y centros de costos para estos datos base (ni en los datos ni en datos/base2026.json), que se necesita para clasificar el balance');
   const anual = base ? base.P.reduce((acc, Pm) => acc.map((f, li) => f.map((x, u) => x + Pm[li][u])), datos.L.map(() => Array(7).fill(0))) : datos.L.map(l => l[3]);
   const part = participacion(anual, datos);
   const R = Array(12).fill(null), meses = [], detalle = Array(12).fill(null), sin = Array(12).fill(null);

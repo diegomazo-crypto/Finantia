@@ -57,7 +57,7 @@ function vTablero(c, t, mod) {
   const sinClas = t.meses.filter(m => m.mes <= est.hasta).reduce((s, m) => s + (m.sinClasificar || 0), 0);
   const avisos = [];
   if (estim.length) avisos.push(`${rango(estim)} se completó con el saldo anterior del balance de ${MESES_L[Math.min(...cargados.filter(m => m > Math.max(...estim)))- 1]}: el acumulado es exacto; la distribución mes a mes de esos meses sigue la estacionalidad del presupuesto.`);
-  if (sinCC.length) avisos.push(`El balance ${sinCC.length > 1 ? 'de algunos meses' : 'de ' + MESES_L[sinCC[0].mes - 1]} no trae centro de costos (es por tercero): los totales son exactos, pero el reparto por unidad y la separación de ESIC se estiman con la participación de cada cuenta en el auxiliar 2026. Para el análisis exacto por unidad, suba el balance de prueba por centro de costos.`);
+  if (sinCC.length) avisos.push(`El balance ${sinCC.length > 1 ? 'de algunos meses' : 'de ' + MESES_L[sinCC[0].mes - 1]} no trae centro de costos (es por tercero): los totales son exactos, pero el reparto por unidad se estima con la participación de cada cuenta en el auxiliar 2026 y ESIC queda dentro de Pregrado (sus ingresos y descuentos se compensan; el neto casi no cambia). Para el análisis exacto por unidad, suba el balance de prueba por centro de costos.`);
   if (Math.abs(sinClas) >= 1e6) avisos.push(`${M(Math.abs(sinClas))} de movimiento quedó sin clasificar (cuentas o centros de costos que no estaban en el reparto 2026)${t.sensible ? '; ver la lista al final' : ''}.`);
 
   c.innerHTML = `

@@ -12,8 +12,8 @@ import * as A from '../servidor/admin/admin.js';
 import * as P from '../servidor/presupuesto/servicio.js';
 import * as EJ from '../servidor/ejecucion/servicio.js';
 import { leerBalance, fechaDelTitulo } from '../servidor/ejecucion/lectura.js';
-import { semaforo, completarConSaldoAnterior, analizar, mapaDesdeBase, mapaDesdeArchivo, clasificarBalance, participacion } from '../motor/ejecucion.js';
-import { datos, leerJSON } from './comun.js';
+import { semaforo, completarConSaldoAnterior, analizar } from '../motor/ejecucion.js';
+import { datos } from './comun.js';
 
 /* Balance por NIT con la forma del de Contai: título con la fecha, cuentas de mayor, total de la cuenta y una fila por tercero */
 const ENC = ['Cuenta', 'Equivalencia', 'Nombre', 'NIT', 'Nombre NIT', 'Saldo Anterior', 'Débitos', 'Créditos', 'Nuevo Saldo'];
@@ -72,15 +72,6 @@ describe('Motor de ejecución', () => {
     assert.deepEqual(est, [1, 2]);
     assert.equal(R[0][0][0] + R[1][0][0], 40); assert.equal(R[0][0][0], 10);
   });
-  test('el mapa sin valores (datos/ejecucion_mapa.json) clasifica igual que el de los datos base', () => {
-    const archivo = leerJSON('../datos/ejecucion_mapa.json'), m1 = mapaDesdeBase(datos), m2 = mapaDesdeArchivo(archivo, datos);
-    assert.ok(m2, 'sirve para la base 2026');
-    const part = participacion(datos.L.map(l => l[3]), datos), filas = [{ cuenta: '43051402', cc: '1407002', movimiento: -1e8 }, { cuenta: '51050601', cc: '', movimiento: 2e7 }];
-    const a = clasificarBalance(filas, datos, m1, part), b = clasificarBalance(filas, datos, m2, part);
-    const s = x => x.real.flat().reduce((t, v) => t + v, 0);
-    assert.ok(Math.abs(s(a) - s(b)) < 1e4);
-    assert.equal(mapaDesdeArchivo({ ...archivo, lineas: 3 }, datos), null);
-  });
   test('analizar devuelve rubros, líneas y serie', () => {
     const P = Array.from({ length: 12 }, () => datos.L.map(l => l[3].map(v => v / 12)));
     const a = analizar(datos, P, P.map((x, m) => (m < 3 ? x : null)), { hasta: 3 });
@@ -95,7 +86,7 @@ describe('Servicio de ejecución', () => {
   before(async () => {
     db = desdePGlite(new PGlite()); await migrar(db);
     su = await cargarActor(db, await A.inicializarSuperusuario(db, { correo: 'su@ceipa.edu.co', nombre: 'Super' }, ['ceipa.edu.co']));
-    const { DD, CCN, CTN, ...sinAuxiliar } = datos; /* como el sitio de pruebas: usa datos/ejecucion_mapa.json */
+    const { DD, CCN, CTN, ...sinAuxiliar } = datos; /* como el sitio de pruebas: usa el reparto de datos/base2026.json */
     await P.cargarDatosBase(db, su, { anioBase: 2026, descripcion: 'Base', contenido: sinAuxiliar });
     const idv = await A.crearUsuario(db, su, { correo: 'vis@ceipa.edu.co', nombre: 'Consulta' }, ['ceipa.edu.co']);
     await A.asignarAcceso(db, su, idv, 'EJECUCION', 'VISUALIZACION');

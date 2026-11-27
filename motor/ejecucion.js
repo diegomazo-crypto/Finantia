@@ -72,13 +72,7 @@ export function mapaDesdeBase(datos) {
     const t = [...a.values()].reduce((s, x) => s + x, 0) || 1;
     return [k, [...a].map(([kk, w]) => { const [li, u, e] = kk.split('|').map(Number); return [li, u, w / t, e]; })];
   }));
-  return { par: norm(par), cuenta: norm(cta), nombresCC: new Map(CCN), nombresCuenta: new Map(CTN), esicCuenta: new Map() };
-}
-
-/** El mapa guardado en datos/ejecucion_mapa.json (sin valores) → la misma forma de mapaDesdeBase, si sirve para estos datos. */
-export function mapaDesdeArchivo(archivo, datos) {
-  if (!archivo || archivo.lineas !== datos.L.length || (archivo.LN && datos.LN && archivo.LN.some((n, i) => n !== datos.LN[i]))) return null;
-  return { par: new Map(archivo.par), cuenta: new Map(archivo.cuenta), nombresCC: new Map(archivo.nombresCC), nombresCuenta: new Map(archivo.nombresCuenta), esicCuenta: new Map(archivo.esicCuenta || []) };
+  return { par: norm(par), cuenta: norm(cta), nombresCC: new Map(CCN), nombresCuenta: new Map(CTN) };
 }
 
 /** ¿La cuenta es de resultados? (clases 4, 5, 6 y 7 del PUC) */
@@ -105,13 +99,10 @@ export function clasificarBalance(filas, datos, mapa, part) {
       s.valor += f.movimiento; sin.set(k, s); totalSin += f.movimiento; continue;
     }
     const esicCC = /esic/i.test(mapa.nombresCC.get(String(f.cc)) || f.nombreCC || '');
-    /* Sin centro de costos: la parte de ESIC de la cuenta según el auxiliar del año base */
-    const sE = !f.cc && !esicCC ? mapa.esicCuenta?.get(String(f.cuenta)) || 0 : 0;
     for (const [li, u, w, e] of destinos) {
       const cod = datos.L[li][1];
-      let v = f.movimiento * w * signoBalance(cod);
+      const v = f.movimiento * w * signoBalance(cod);
       if ((esicCC || e) && (cod === 'IB' || cod === 'DS')) { aparte[cod] += v; continue; }
-      if (sE && (cod === 'IB' || cod === 'DS')) { aparte[cod] += v * sE; v *= 1 - sE; }
       const reparto = u >= 0 ? [[u, 1]] : part[li].map((p, j) => [j, p]).filter(([, p]) => p);
       for (const [j, p] of reparto) {
         real[li][j] += v * p;
