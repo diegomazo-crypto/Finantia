@@ -45,6 +45,7 @@ escribir('estilos.css', leer('web/estilos.css') + `
 for (const f of readdirSync(join(RAIZ, 'motor'))) if (f.endsWith('.js')) copiar(`motor/${f}`);
 copiar('datos/base2026.json');
 copiar('datos/evaluacion2027.json');
+copiar('datos/nomina_mapa.json');
 copiar('servidor/errores.js');
 copiar('servidor/admin/permisos.js');
 copiar('servidor/admin/bitacora.js');

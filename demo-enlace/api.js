@@ -11,7 +11,7 @@ import { crearModelo, DEFAULTS, ESCS, FIXED, lineasMensuales } from '../motor/in
 import { puede, veDetalleSensible, ROLES } from '../servidor/admin/permisos.js';
 import { ErrorFinantia } from '../servidor/errores.js';
 import { validarSupuestos, sinAuxiliar } from '../servidor/presupuesto/servicio.js';
-import { filasDelArchivo, interpretarNomina, encabezadoPersonas, interpretarPersonas, filasDePersonas } from '../servidor/presupuesto/nomina.js';
+import { filasDelArchivo, contenidoDeArchivo, avisosCarga, filasDePersonas } from '../servidor/presupuesto/nomina.js';
 import { planNomina, smmlv2027, MODOS } from '../motor/nomina.js';
 import { versionPorDefecto, soloFlujo } from '../servidor/planeacion/servicio.js';
 import { validarEvaluacion, EJERCICIOS as EJ_EVALUACION } from '../servidor/presupuesto/evaluacion.js';
@@ -60,6 +60,7 @@ const recalcular = v => { const m = crearModelo(S.datos, v.supuestos); v.resulta
 async function iniciar() {
   if (S.datos) return;
   S.datos = await (await fetch(new URL('../datos/base2026.json', import.meta.url))).json();
+  S.mapaNomina = await (await fetch(new URL('../datos/nomina_mapa.json', import.meta.url))).json();
   const m = crearModelo(S.datos), g = m.pyg2026();
   S.base = { units: S.datos.units, names: S.datos.names, base2026: m.base2026, eerr2026: g.tot, eerr2026Unidades: g.units };
   S.ejercicios.push({ anio: 2027, estado: 'ABIERTO', creado_en: ahora() });
@@ -252,7 +253,7 @@ ruta('GET', '/api/presupuesto/ejercicios/:anio/nomina', ({ a, p }) => {
   const c = S.nomina.find(n => n.ejercicio === Number(p.anio) && !n.retirado);
   if (!c) return { activa: true, carga: null, filas: [] };
   reg(a.id, 'PRESUPUESTO', 'VER_NOMINA', { entidad: 'nomina', entidad_id: String(c.id) });
-  return { activa: true, carga: c.carga, filas: c.filas, ...(c.personas ? { personas: c.personas } : {}) };
+  return { activa: true, carga: c.carga, avisos: avisosCarga(c.contenido), filas: c.filas, ...(c.personas ? { personas: c.personas } : {}) };
 });
 const opPlan = (sm = DEFAULTS.Moderado.sm) => ({ REP: S.datos.REP, nLineas: S.datos.LP.length, sm27: smmlv2027(sm) });
 ruta('POST', '/api/presupuesto/versiones/:id/nomina', ({ a, p, b }) => {
@@ -276,18 +277,19 @@ ruta('POST', '/api/presupuesto/ejercicios/:anio/nomina', async ({ a, p, b, cab }
   const nombre = decodeURIComponent(cab['X-Nombre'] || '');
   const inflar = async d => new Uint8Array(await new Response(new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
   const celdas = await filasDelArchivo(nombre, new Uint8Array(await b.arrayBuffer()), inflar);
-  let filas, personas = null;
-  if (encabezadoPersonas(celdas) >= 0) { personas = interpretarPersonas(celdas, S.datos.LP.length); filas = filasDePersonas(planNomina(personas, opPlan())); }
-  else filas = interpretarNomina(celdas);
-  S.nomina.filter(n => n.ejercicio === Number(p.anio)).forEach(n => { n.retirado = true; n.filas = []; n.personas = null; });
+  const previo = S.nomina.find(n => n.ejercicio === Number(p.anio) && !n.retirado)?.contenido || null;
+  const contenido = contenidoDeArchivo(celdas, previo, { mapa: S.mapaNomina, nLineas: S.datos.LP.length });
+  const personas = contenido.formato === 'personas' ? contenido.personas : null;
+  const filas = personas ? filasDePersonas(planNomina(personas, opPlan())) : contenido.formato === 'bdd' ? [] : contenido;
+  S.nomina.filter(n => n.ejercicio === Number(p.anio)).forEach(n => { n.retirado = true; n.filas = []; n.personas = null; n.contenido = null; });
   const id = S.nomina.length + 1;
   const carga = { id, nombre, filas: filas.length, personas: filas.reduce((s, f) => s + f.continuan + f.nuevos + f.vacantes, 0), costoTotal: filas.reduce((s, f) => s + f.costoAnual, 0), huella: '—', subidoEn: ahora(), subidoPor: a.nombre };
-  carga.formato = personas ? 'personas' : 'cargos'; if (personas) carga.filas = personas.length;
-  S.nomina.push({ id, ejercicio: Number(p.anio), carga, filas, personas });
+  carga.formato = contenido.formato || 'cargos'; if (personas) carga.filas = personas.length;
+  S.nomina.push({ id, ejercicio: Number(p.anio), carga, filas, personas, contenido });
   reg(a.id, 'PRESUPUESTO', 'SUBIR_NOMINA', { entidad: 'nomina', entidad_id: String(id), despues: { filas: filas.length, costoTotal: carga.costoTotal } });
   return { id };
 });
-ruta('DELETE', '/api/presupuesto/nomina/:id', ({ a, p }) => { sensible(a, 'editar', 'la nómina por cargo'); const c = S.nomina.find(n => n.id === Number(p.id) && !n.retirado) || falla('NO_ENCONTRADO', 'La carga de nómina no existe o ya fue retirada'); c.retirado = true; c.filas = []; c.personas = null; reg(a.id, 'PRESUPUESTO', 'RETIRAR_NOMINA', { entidad: 'nomina', entidad_id: p.id }); });
+ruta('DELETE', '/api/presupuesto/nomina/:id', ({ a, p }) => { sensible(a, 'editar', 'la nómina por cargo'); const c = S.nomina.find(n => n.id === Number(p.id) && !n.retirado) || falla('NO_ENCONTRADO', 'La carga de nómina no existe o ya fue retirada'); c.retirado = true; c.filas = []; c.personas = null; c.contenido = null; reg(a.id, 'PRESUPUESTO', 'RETIRAR_NOMINA', { entidad: 'nomina', entidad_id: p.id }); });
 
 /* Evaluación del equipo (solo 2027) */
 ruta('GET', '/api/presupuesto/ejercicios/:anio/evaluacion', ({ a, p }) => {

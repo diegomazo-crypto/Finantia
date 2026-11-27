@@ -9,7 +9,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { desdePGlite, migrar } from '../servidor/db/conexion.js';
 import { crearServidor } from '../servidor/web/servidor.js';
 import { sembrarDemo } from '../servidor/web/demo.js';
-import { crearNomina, interpretarNomina, numero, leerCsv } from '../servidor/presupuesto/nomina.js';
+import { crearNomina, interpretarNomina, numero, leerCsv, contenidoDeArchivo, avisosCarga } from '../servidor/presupuesto/nomina.js';
 import { readFileSync } from 'node:fs';
 import { inflateRawSync } from 'node:zlib';
 import { leerXlsx } from '../servidor/presupuesto/xlsx.js';
@@ -86,7 +86,7 @@ describe('Lectura del archivo de nómina', () => {
     assert.ok(!JSON.stringify(f).includes('ana@x.co'), 'el correo no se guarda');
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;cedula;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;<script>;1;0;0;1;1'), /cédula inválida/);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n5.1;A;B;1;0;0;1;1'), /Fila 2: rubro "5.1" desconocido/);
-    assert.throws(() => interpretarNomina('rubro;proceso;cargo\n4.1;A;B'), /No se reconoce el formato del archivo. Columnas encontradas: rubro, proceso, cargo.*Nomina2027.*por cargo faltan: continuan/s);
+    assert.throws(() => interpretarNomina('rubro;proceso;cargo\n4.1;A;B'), /No se reconoce el formato del archivo. Columnas encontradas: rubro, proceso, cargo.*Item informe.*por cargo faltan: continuan/s);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;-1;0;0;1;1'), /Fila 2: valor inválido en continuan/);
   });
 });
@@ -322,5 +322,41 @@ describe('Plan de nómina por persona (como el Excel v21)', () => {
     const vuelta = await ok(pedir(base, 'GET', `/api/presupuesto/versiones/${vid}`, { como: U.adm }));
     assert.equal(vuelta.resultados.Moderado.tot.RN, antes.resultados.Moderado.tot.RN);
     assert.ok(!vuelta.supuestos.LP && !vuelta.supuestos.nominaPlan);
+  });
+});
+
+describe('plan del equipo + base de nómina (datos inventados)', () => {
+  const mapa = JSON.parse(readFileSync(new URL('../datos/nomina_mapa.json', import.meta.url)));
+  const op = { mapa, nLineas: 117 };
+  const plan = leerCsv([
+    'Cedula;Nombre colaborador;Centro de costos; SALARIO 2027 ; SALARIO ORDINARIO 2027 ; Costo anual ; Area ;Item informe;Nodo',
+    '111;PERSONA UNO;FINANCIERA;10.000.000;10.000.000;180.000.000;Administrativos;Financiera y Tributaria;Sabaneta',
+    '222;PERSONA DOS;DOCENTES TIEM COMPLETO PREGR;5000000;5000000;45000000;Costos de Prestación del Servicio;Docentes Tiempo Completo Pregrado;Sabaneta',
+    '222;PERSONA DOS;MAESTRIAS PRESENCIAL;5000000;5000000;45000000;Costos de Prestación del Servicio;Posgrado - Maestría;Sabaneta',
+    ';PLAZA NUEVA;COMERCIAL BQLLA;2000000;2000000;36000000;Ventas;Gastos de Venta y Publicidad;Barranquilla',
+    ';COMISIONES;COMERCIAL SABANETA;0;0;50000000;Ventas;Gastos de Venta y Publicidad;Sabaneta',
+    ';VACANTE;INVESTIGACIONES;0;0;0;Administración Académica;Investigación;Sabaneta',
+    ';;;;;311000000;;;'
+  ].join('\n'));
+  const bdd = leerCsv('DOCUMENTO;NOMBRE;CECO;CARGO; VALORES ADICIONALES ; SALARIO ;CIA\n111;PERSONA UNO;X;ANALISTA FINANCIERO;0;9000000;CEIPA\n222;PERSONA DOS;Y;DOCENTE;0;4800000;CEIPA');
+
+  test('se cruzan por cédula en cualquier orden', () => {
+    const solo = contenidoDeArchivo(plan, null, op);
+    assert.equal(solo.personas.length, 6);
+    assert.match(avisosCarga(solo)[0], /Falta la base de nómina/);
+    const c = contenidoDeArchivo(bdd, solo, op), d = contenidoDeArchivo(plan, contenidoDeArchivo(bdd, null, op), op);
+    assert.deepEqual(c.personas, d.personas);
+    const [uno, dosA, dosB, nuevo, bolsa, vac] = c.personas;
+    assert.equal(uno.s26, 9000000); assert.equal(uno.cargo, 'Analista financiero'); assert.equal(uno.factor, 1.5);
+    assert.equal(uno.unidad, 'REPARTO'); assert.equal(uno.rubro, 'ADMINISTRATIVOS'); assert.equal(uno.cedula, '111');
+    assert.equal(dosA.peso, 0.5); assert.equal(dosB.peso, 0.5); assert.equal(dosA.unidad, 'PRE'); assert.equal(dosB.unidad, 'MAE');
+    assert.equal(nuevo.s26, null); assert.equal(nuevo.unidad, 'BAQ');
+    assert.equal(bolsa.bolsa, 50000000); assert.equal(vac.bolsa, null); assert.equal(vac.s27, 0);
+    assert.deepEqual(avisosCarga(c), []);
+  });
+  test('ítem desconocido y archivo sin formato', () => {
+    const malo = leerCsv('Cedula;Nombre colaborador;SALARIO 2027;Costo anual;Area;Item informe;Nodo\n1;A;1;12;Ventas;Inventado;Sabaneta');
+    assert.throws(() => contenidoDeArchivo(malo, null, op), /ítem informe "Inventado" no está/);
+    assert.match(avisosCarga(contenidoDeArchivo(bdd, null, op))[0], /Base de nómina cargada \(2 personas\)/);
   });
 });

@@ -20,6 +20,8 @@ import { falla, DATOS_INVALIDOS, ESTADO_INVALIDO, NO_AUTORIZADO, NO_DISPONIBLE, 
 /* Datos base de la instalación (asignación REPARTO por línea); se cargan al primer uso para que este módulo sirva también en el navegador */
 let base0 = null;
 const baseDatos = async () => (base0 ??= JSON.parse((await import('node:fs')).readFileSync(new URL('../../datos/base2026.json', import.meta.url))));
+let mapa0 = null;
+const mapaDatos = async () => (mapa0 ??= JSON.parse((await import('node:fs')).readFileSync(new URL('../../datos/nomina_mapa.json', import.meta.url))));
 import { esZip, leerXlsx } from './xlsx.js';
 import { planNomina, revisarAsignacion, smmlv2027, MODOS } from '../../motor/nomina.js';
 import { DEFAULTS } from '../../motor/index.js';
@@ -172,6 +174,134 @@ export function interpretarPersonas(filas, nLineas = null) {
   return out;
 }
 
+/* ---------------------------------------------------------------------------------------------
+ * Plan del equipo financiero tal como lo envía (hoja Nomina de PRESUPUESTO_2027_ENVIADO) más la
+ * base de datos de nómina (BDD), cruzados por cédula, como se armó la hoja Nomina2027 de la 1.0:
+ *  - del plan: cédula, nombre, centro de costos, salario 2027, costo anual, área, ítem informe, nodo;
+ *  - de la BDD: cargo y salario actual (= salario 2026). Quien no está en la BDD queda como nuevo;
+ *  - factor prestacional = costo anual ÷ (12 × salario 2027), con 4 decimales;
+ *  - sin salario 2027: con costo es una bolsa (comisiones, escalafón, metas); sin costo, una vacante;
+ *  - quien aparece en varias filas (dos procesos) pesa 1 ÷ número de filas en cada una;
+ *  - fila del modelo y unidad: datos/nomina_mapa.json (tomado del Excel v21).
+ * Los dos archivos se suben por separado, en cualquier orden; cada carga conserva el otro.
+ * ------------------------------------------------------------------------------------------- */
+const COL_EQUIPO = {
+  cedula: COLUMNAS.cedula, nombre: [...COLUMNAS.nombre, 'nombre_colaborador', 'colaborador'], centro: ['centro_de_costos', 'centro_costos', 'centro_de_costo'],
+  s27: ['salario_2027', 'salario_mensual_2027'], s27o: ['salario_ordinario_2027'], costo: ['costo_anual', 'costo_anual_2027'],
+  area: ['area'], proceso: ['item_informe', 'item_del_informe'], nodo: ['nodo', 'sede']
+};
+const COL_BDD = {
+  cedula: [...COLUMNAS.cedula, 'numero_identificacion', 'no_identificacion', 'numero_de_identificacion', 'identificacion_empleado', 'cedula_empleado', 'documento_identidad'],
+  nombre: COLUMNAS.nombre, cargo: ['cargo', 'nombre_cargo', 'cargo_actual', 'descripcion_cargo', 'nombre_del_cargo'],
+  salario: ['salario', 'salario_basico', 'sueldo', 'sueldo_basico', 'salario_actual', 'salario_mensual', 'basico', 'asignacion_basica', 'salario_2026', 'salario_mensual_2026', 'salario_base']
+};
+const columnas = (fila, def) => { const enc = fila.map(normal), col = {}; for (const [k, a] of Object.entries(def)) { const i = enc.findIndex(x => a.includes(x)); if (i >= 0) col[k] = i; } return col; };
+const buscarEnc = (filas, ok) => filas.slice(0, 60).findIndex(ok);
+
+/** Plan del equipo: fila de encabezados con "Item informe", "Costo anual" y "Salario 2027" (o -1). */
+export const encabezadoEquipo = filas => buscarEnc(filas, f => { const c = columnas(f, COL_EQUIPO); return c.proceso != null && c.costo != null && (c.s27 != null || c.s27o != null) && !f.some(x => normal(x) === 'fila_modelo'); });
+/** Base de nómina: cédula y salario, sin columnas del plan (o -1). */
+export const encabezadoBdd = filas => buscarEnc(filas, f => { const c = columnas(f, COL_BDD); return c.cedula != null && c.salario != null && !f.some(x => ['item_informe', 'fila_modelo', 'costo_anual'].includes(normal(x))); });
+
+const cedulaDe = (v, r) => {
+  const ced = String(v ?? '').replace(/[.\s]/g, '').replace(/\.0$/, '').trim();
+  if (ced && !/^[0-9A-Za-z-]{3,20}$/.test(ced)) falla(DATOS_INVALIDOS, `Fila ${r}: cédula inválida ("${v}")`);
+  return ced;
+};
+
+/** Filas del plan del equipo → registros validados (sin cruzar todavía con la BDD). */
+export function interpretarEquipo(filas, mapa) {
+  const h = encabezadoEquipo(filas);
+  if (h < 0) falla(DATOS_INVALIDOS, 'No se encontró el encabezado del plan del equipo (Item informe, Costo anual, Salario 2027)');
+  const col = columnas(filas[h], COL_EQUIPO), out = [];
+  for (let i = h + 1; i < filas.length; i++) {
+    const f = filas[i], r = i + 1, val = k => (col[k] == null ? '' : f[col[k]] ?? ''), txt = k => String(val(k)).trim();
+    if (!txt('proceso')) continue; /* totales o notas */
+    if (out.length >= MAX_FILAS) falla(DATOS_INVALIDOS, `El archivo supera ${MAX_FILAS} personas`);
+    const m = mapa.procesos[normal(txt('proceso'))];
+    if (!m) falla(DATOS_INVALIDOS, `Fila ${r}: el ítem informe "${txt('proceso')}" no está en la asignación del modelo. Ítems conocidos: ${Object.values(mapa.procesos).map(x => x.proceso).join(', ')}`);
+    const num = k => { if (col[k] == null) return 0; const x = numero(val(k)); if (!Number.isFinite(x) || x < 0) falla(DATOS_INVALIDOS, `Fila ${r}: valor inválido en ${COL_EQUIPO[k][0]} ("${val(k)}")`); return x; };
+    const rubro = rubroDe(txt('area')) || rubroDe(m.area);
+    const s27 = col.s27 != null ? num('s27') : num('s27o');
+    const e = { rubro, area: (rubroDe(txt('area')) ? txt('area') : m.area).slice(0, 80), proceso: m.proceso, centro: txt('centro').slice(0, 120), nodo: txt('nodo').slice(0, 60), s27, costo: num('costo') };
+    const ced = cedulaDe(val('cedula'), r); if (ced) e.cedula = ced;
+    const nom = txt('nombre').slice(0, 160); if (nom) e.nombre = nom;
+    out.push(e);
+  }
+  if (!out.length) falla(DATOS_INVALIDOS, 'El plan del equipo no tiene filas');
+  return out;
+}
+
+/** Base de nómina → { cédula: { s26, cargo } }. */
+export function interpretarBdd(filas) {
+  const h = encabezadoBdd(filas);
+  if (h < 0) falla(DATOS_INVALIDOS, 'No se encontró el encabezado de la base de nómina (cédula y salario)');
+  const col = columnas(filas[h], COL_BDD), out = {};
+  let n = 0;
+  for (let i = h + 1; i < filas.length; i++) {
+    const f = filas[i], r = i + 1, val = k => (col[k] == null ? '' : f[col[k]] ?? '');
+    const ced = cedulaDe(val('cedula'), r);
+    if (!ced) continue;
+    if (++n > MAX_FILAS) falla(DATOS_INVALIDOS, `El archivo supera ${MAX_FILAS} personas`);
+    const s = numero(val('salario'));
+    if (!Number.isFinite(s) || s < 0) falla(DATOS_INVALIDOS, `Fila ${r}: salario inválido ("${val('salario')}")`);
+    const cargo = String(val('cargo')).trim().slice(0, 120);
+    if (!out[ced]) out[ced] = { s26: s, cargo }; /* si figura dos veces, vale la primera fila */
+  }
+  if (!n) falla(DATOS_INVALIDOS, 'La base de nómina no tiene personas con cédula');
+  return out;
+}
+
+const capital = s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
+
+/** Plan del equipo + BDD → personas del plan (mismo formato que la hoja Nomina2027). */
+export function combinarEquipo(equipo, bdd = {}, mapa) {
+  const veces = {};
+  for (const e of equipo) if (e.cedula) veces[e.cedula] = (veces[e.cedula] || 0) + 1;
+  return equipo.map(e => {
+    const b = e.cedula ? bdd[e.cedula] : null, n = normal;
+    const unidad = mapa.unidad[`${n(e.nodo)}|${n(e.centro)}|${n(e.proceso)}`] || mapa.unidadNodo[`${n(e.nodo)}|${n(e.proceso)}`] || (/barranquilla/i.test(e.nodo) ? 'BAQ' : 'REPARTO');
+    const p = {
+      rubro: e.rubro, area: e.area, proceso: e.proceso, centro: e.centro, nodo: e.nodo,
+      cargo: capital(b?.cargo) || 'Sin cargo', s26: b ? b.s26 : null, s27: e.s27,
+      factor: e.s27 > 0 ? Math.round(e.costo / (12 * e.s27) * 1e4) / 1e4 : 0, bolsa: e.s27 > 0 ? null : (e.costo || null),
+      fila: mapa.procesos[n(e.proceso)].fila, unidad, peso: e.cedula ? 1 / veces[e.cedula] : 1
+    };
+    if (e.cedula) p.cedula = e.cedula;
+    if (e.nombre) p.nombre = e.nombre;
+    return p;
+  });
+}
+
+/**
+ * Contenido a guardar para un archivo subido, conservando lo que ya estaba (el otro de los dos archivos).
+ * @returns {{ formato:'personas', personas, equipo?, bdd? } | { formato:'bdd', bdd } | object[]}  (lo último: nómina por cargo)
+ */
+export function contenidoDeArchivo(celdas, previo, { mapa, nLineas }) {
+  if (encabezadoPersonas(celdas) >= 0) return { formato: 'personas', personas: interpretarPersonas(celdas, nLineas) };
+  const bddPrevio = previo?.bdd || null, equipoPrevio = previo?.equipo || null;
+  if (encabezadoEquipo(celdas) >= 0) {
+    const equipo = interpretarEquipo(celdas, mapa), personas = combinarEquipo(equipo, bddPrevio || {}, mapa);
+    const e = revisarAsignacion(personas, nLineas); if (e) falla(DATOS_INVALIDOS, e);
+    return { formato: 'personas', personas, equipo, ...(bddPrevio ? { bdd: bddPrevio } : {}) };
+  }
+  if (encabezadoBdd(celdas) >= 0) {
+    const bdd = interpretarBdd(celdas);
+    if (!equipoPrevio) return { formato: 'bdd', bdd };
+    return { formato: 'personas', personas: combinarEquipo(equipoPrevio, bdd, mapa), equipo: equipoPrevio, bdd };
+  }
+  return interpretarNomina(celdas);
+}
+
+/** Avisos sobre el cruce de los dos archivos, para la pantalla. */
+export function avisosCarga(contenido) {
+  if (contenido?.formato === 'bdd') return [`Base de nómina cargada (${Object.keys(contenido.bdd).length} personas). Falta el plan por persona del equipo: súbalo y se cruzan por cédula.`];
+  if (!contenido?.equipo) return [];
+  if (!contenido.bdd) return ['Falta la base de nómina (cargo y salario actual). Mientras no se suba, todos los que tienen salario 2027 cuentan como cargos nuevos y sin incremento desde abril.'];
+  const fuera = new Set(contenido.equipo.filter(e => e.cedula && e.s27 > 0 && !contenido.bdd[e.cedula]).map(e => e.cedula)).size;
+  return fuera ? [`${fuera} persona${fuera === 1 ? '' : 's'} del plan con salario 2027 no está${fuera === 1 ? '' : 'n'} en la base de nómina: cuenta${fuera === 1 ? '' : 'n'} como cargo nuevo.`] : [];
+}
+
 /** Vista por cargo (la de la pantalla) del plan por persona, con su clase y costo. */
 export function filasDePersonas(plan) {
   return plan.personas.map(p => ({
@@ -193,8 +323,8 @@ export function interpretarNomina(entrada) {
   if (faltan.length) {
     const vistas = filas[0].map(x => String(x).trim()).filter(Boolean).slice(0, 30).join(', ');
     falla(DATOS_INVALIDOS, `No se reconoce el formato del archivo. Columnas encontradas: ${vistas || '(ninguna)'}. `
-      + 'Para el plan por persona, como en la 1.0, suba el Excel del modelo (se lee la hoja Nomina2027) o un libro con sus columnas: '
-      + 'Cédula, Nombre, Área, Proceso, Cargo, Salario mensual 2026, Salario mensual 2027, Factor prestacional, Bolsa, Fila modelo, Unidad modelo y Peso persona. '
+      + 'Para el plan por persona, como en la 1.0, suba dos archivos: el plan del equipo (Cedula, Nombre colaborador, Centro de costos, Salario 2027, Costo anual, Area, Item informe, Nodo) '
+      + 'y la base de nómina (Documento, Nombre, Cargo, Salario); o el Excel del modelo con la hoja Nomina2027. '
       + `Para la nómina por cargo faltan: ${faltan.map(k => COLUMNAS[k][0]).join(', ')}.`);
   }
   if (filas.length - 1 > MAX_FILAS) falla(DATOS_INVALIDOS, `El archivo supera ${MAX_FILAS} filas`);
@@ -245,12 +375,11 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
     const n = String(nombre || '').normalize('NFC').replace(/[\\/\x00-\x1f"<>|:*?]/g, '_').trim().slice(0, 180);
     if (!Buffer.isBuffer(contenido) || !contenido.length) falla(DATOS_INVALIDOS, 'El archivo está vacío');
     const celdas = await filasDelArchivo(n, contenido, (d, max) => inflateRawSync(d, { maxOutputLength: max }));
-    let filas, guardar;
-    if (encabezadoPersonas(celdas) >= 0) {
-      const op = await opPlan(), pers = interpretarPersonas(celdas, op.nLineas);
-      guardar = { formato: 'personas', personas: pers };
-      filas = filasDePersonas(planNomina(pers, op));
-    } else { filas = interpretarNomina(celdas); guardar = filas; }
+    const op = await opPlan();
+    let previo = null;
+    try { previo = (await cargaVigente(db, anio))?.contenido || null; } catch { /* otra llave: se empieza de cero */ }
+    const guardar = contenidoDeArchivo(celdas, previo, { mapa: await mapaDatos(), nLineas: op.nLineas });
+    const filas = guardar.formato === 'personas' ? filasDePersonas(planNomina(guardar.personas, op)) : guardar.formato === 'bdd' ? [] : guardar;
     const personas = filas.reduce((s, f) => s + f.continuan + f.nuevos + f.vacantes, 0);
     const costo = filas.reduce((s, f) => s + f.costoAnual, 0);
     const huella = createHash('sha256').update(contenido).digest('hex');
@@ -260,7 +389,7 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
       if (anteriores.length) await t.query('UPDATE nomina_carga SET retirado_en = now(), retirado_por = $2, cifrado = NULL, iv = NULL, etiqueta = NULL WHERE id = ANY($1::bigint[])', [anteriores, actor.id]);
       const id = Number((await t.query(
         'INSERT INTO nomina_carga (ejercicio, nombre, filas, personas, costo_total, huella, subido_por) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-        [anio, n, guardar.formato ? guardar.personas.length : filas.length, personas, costo, huella, actor.id])).rows[0].id);
+        [anio, n, guardar.formato === 'personas' ? guardar.personas.length : guardar.formato === 'bdd' ? Object.keys(guardar.bdd).length : filas.length, personas, costo, huella, actor.id])).rows[0].id);
       const iv = randomBytes(12), c = createCipheriv('aes-256-gcm', k, iv);
       c.setAAD(aad(anio, id));
       const cifrado = Buffer.concat([c.update(JSON.stringify(guardar), 'utf8'), c.final()]);
@@ -301,8 +430,10 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
     const { r, contenido } = c;
     await registrar(db, { usuarioId: actor.id, modulo: M, accion: 'VER_NOMINA', entidad: 'nomina', entidadId: Number(r.id), detalle: `ejercicio ${anio}` });
     const carga = { id: Number(r.id), nombre: r.nombre, filas: r.filas, personas: Number(r.personas), costoTotal: Number(r.costo_total), huella: r.huella, subidoEn: r.subido_en, subidoPor: r.subido_por, formato: contenido.formato || 'cargos' };
-    if (contenido.formato === 'personas') return { activa, carga, filas: filasDePersonas(planNomina(contenido.personas, await opPlan())), personas: contenido.personas };
-    return { activa, carga, filas: contenido };
+    const avisos = avisosCarga(contenido);
+    if (contenido.formato === 'personas') return { activa, carga, avisos, filas: filasDePersonas(planNomina(contenido.personas, await opPlan())), personas: contenido.personas };
+    if (contenido.formato === 'bdd') return { activa, carga, avisos, filas: [] };
+    return { activa, carga, avisos, filas: contenido };
   }
 
   /**

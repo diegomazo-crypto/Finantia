@@ -1,0 +1,297 @@
+{
+ "_descripcion": "Asignación del plan de nómina del equipo (hoja Nomina del presupuesto enviado) a filas y unidades del modelo, tomada de la hoja Nomina2027 del Excel v21. Solo categorías: proceso (Item informe) → fila del modelo y área; nodo|centro de costos|proceso → unidad (si no está, nodo|proceso; si no, Barranquilla → BAQ y el resto REPARTO). Sin datos personales.",
+ "procesos": {
+  "financiera_y_tributaria": {
+   "proceso": "Financiera y Tributaria",
+   "area": "Administrativos",
+   "fila": 100
+  },
+  "rectoria": {
+   "proceso": "Rectoría",
+   "area": "Dirección Institucional",
+   "fila": 111
+  },
+  "gastos_de_venta_y_publicidad": {
+   "proceso": "Gastos de Venta y Publicidad",
+   "area": "Ventas",
+   "fila": 21
+  },
+  "vicerrectoria_academica": {
+   "proceso": "Vicerrectoría Académica",
+   "area": "Administración Académica",
+   "fila": 73
+  },
+  "asesores_estudiantes": {
+   "proceso": "Asesores Estudiantes",
+   "area": "Administración Académica",
+   "fila": 34
+  },
+  "contratacion_y_nomina": {
+   "proceso": "Contratación y Nomina",
+   "area": "Administrativos",
+   "fila": 97
+  },
+  "barranquilla": {
+   "proceso": "Barranquilla",
+   "area": "Administración Académica",
+   "fila": 78
+  },
+  "sistemas_de_informacion": {
+   "proceso": "Sistemas de Información",
+   "area": "Tecnología",
+   "fila": 92
+  },
+  "acreditacion_y_registro_calificado": {
+   "proceso": "Acreditación y Registro Calificado",
+   "area": "Administración Académica",
+   "fila": 27
+  },
+  "docentes_tiempo_completo_pregrado": {
+   "proceso": "Docentes Tiempo Completo Pregrado",
+   "area": "Costos de Prestación del Servicio",
+   "fila": 8
+  },
+  "docentes_tiempo_completo_posgrado": {
+   "proceso": "Docentes Tiempo Completo Posgrado",
+   "area": "Costos de Prestación del Servicio",
+   "fila": 8
+  },
+  "internacionalizacion": {
+   "proceso": "Internacionalización",
+   "area": "Administración Académica",
+   "fila": 56
+  },
+  "docentes_medio_tiempo_sabaneta": {
+   "proceso": "Docentes Medio Tiempo Sabaneta",
+   "area": "Costos de Prestación del Servicio",
+   "fila": 9
+  },
+  "posgrado_maestria": {
+   "proceso": "Posgrado - Maestría",
+   "area": "Administración Académica",
+   "fila": 65
+  },
+  "administracion_plus_language": {
+   "proceso": "Administración Plus Language",
+   "area": "Administración Académica",
+   "fila": 32
+  },
+  "proyeccion_profesional": {
+   "proceso": "Proyección Profesional",
+   "area": "Administración Académica",
+   "fila": 68
+  },
+  "docentes_tiempo_completo_barranquilla": {
+   "proceso": "Docentes Tiempo Completo Barranquilla",
+   "area": "Costos de Prestación del Servicio",
+   "fila": 8
+  },
+  "isolution": {
+   "proceso": "Isolution",
+   "area": "Unidades de Negocio",
+   "fila": 22
+  },
+  "presupuesto": {
+   "proceso": "Presupuesto",
+   "area": "Administrativos",
+   "fila": 106
+  },
+  "egresados": {
+   "proceso": "Egresados",
+   "area": "Administración Académica",
+   "fila": 43
+  },
+  "infraestructura_tecnologica": {
+   "proceso": "Infraestructura Tecnológica",
+   "area": "Tecnología",
+   "fila": 86
+  },
+  "cdt": {
+   "proceso": "CDT",
+   "area": "Administración Académica",
+   "fila": 38
+  },
+  "gestion_de_la_calidad": {
+   "proceso": "Gestión de la Calidad",
+   "area": "Administración Académica",
+   "fila": 50
+  },
+  "investigacion": {
+   "proceso": "Investigación",
+   "area": "Administración Académica",
+   "fila": 58
+  },
+  "registro_y_control": {
+   "proceso": "Registro y Control",
+   "area": "Administración Académica",
+   "fila": 71
+  },
+  "consejeria_estudiantil": {
+   "proceso": "Consejería Estudiantil",
+   "area": "Administración Académica",
+   "fila": 41
+  },
+  "comunicaciones": {
+   "proceso": "Comunicaciones",
+   "area": "Dirección Institucional",
+   "fila": 108
+  },
+  "biblioteca": {
+   "proceso": "Biblioteca",
+   "area": "Administración Académica",
+   "fila": 36
+  },
+  "docentes_tiempo_completo_plus": {
+   "proceso": "Docentes Tiempo Completo Plus",
+   "area": "Costos de Prestación del Servicio",
+   "fila": 8
+  },
+  "secretaria_general": {
+   "proceso": "Secretaria General",
+   "area": "Dirección Institucional",
+   "fila": 114
+  },
+  "mantenimiento_y_servicios_generales": {
+   "proceso": "Mantenimiento y Servicios Generales",
+   "area": "Administrativos",
+   "fila": 104
+  },
+  "seguridad_y_salud_en_el_trabajo": {
+   "proceso": "Seguridad y Salud en el Trabajo",
+   "area": "Administración Académica",
+   "fila": 82
+  },
+  "gestion_de_profesores": {
+   "proceso": "Gestión de Profesores",
+   "area": "Administración Académica",
+   "fila": 76
+  },
+  "administracion_excelencia_e_innovacion": {
+   "proceso": "Administración Excelencia e Innovación",
+   "area": "Administración Académica",
+   "fila": 74
+  },
+  "administracion_escuela": {
+   "proceso": "Administración Escuela",
+   "area": "Administración Académica",
+   "fila": 30
+  },
+  "enfermeria": {
+   "proceso": "Enfermería",
+   "area": "Administración Académica",
+   "fila": 48
+  },
+  "gestion_administrativa": {
+   "proceso": "Gestión Administrativa",
+   "area": "Corporativo",
+   "fila": 95
+  },
+  "laboratorio_financiero": {
+   "proceso": "Laboratorio Financiero",
+   "area": "Administración Académica",
+   "fila": 63
+  }
+ },
+ "unidad": {
+  "sabaneta|financiera|financiera_y_tributaria": "REPARTO",
+  "sabaneta|rectoria|rectoria": "REPARTO",
+  "sabaneta|financiera|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|financiera|rectoria": "REPARTO",
+  "sabaneta|vicerectoria_academica|vicerrectoria_academica": "REPARTO",
+  "sabaneta|asesores_estudiantes|asesores_estudiantes": "REPARTO",
+  "sabaneta|gestion_humana|contratacion_y_nomina": "REPARTO",
+  "barranquilla|administrativo|barranquilla": "BAQ",
+  "sabaneta|2304001|sistemas_de_informacion": "REPARTO",
+  "sabaneta|gestion_administrativa|rectoria": "REPARTO",
+  "sabaneta|comercial|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|acre_y_reg_calificados_p_antig|acreditacion_y_registro_calificado": "REPARTO",
+  "sabaneta|mercadeo|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|admisiones|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|docentes_tiem_completo_pregr|docentes_tiempo_completo_pregrado": "PRE",
+  "sabaneta|docentes_tiempo_completo_posgr|docentes_tiempo_completo_posgrado": "POS",
+  "sabaneta|internacionalizacion|internacionalizacion": "REPARTO",
+  "sabaneta|docentes_medio_tiempo_pregrado|docentes_medio_tiempo_sabaneta": "PRE",
+  "sabaneta|maestrias_presencial|posgrado_maestria": "MAE",
+  "sabaneta|admon_plus_languague_sabaneta|administracion_plus_language": "REPARTO",
+  "sabaneta|proyeccion_profesional|proyeccion_profesional": "REPARTO",
+  "barranquilla|docente_tiempo_completo_barranquilla|docentes_tiempo_completo_barranquilla": "BAQ",
+  "sabaneta|teclab_ceipa|isolution": "URE",
+  "sabaneta|presupuesto|presupuesto": "REPARTO",
+  "sabaneta|admon_isolution_medellin|isolution": "URE",
+  "sabaneta|alianza|gastos_de_venta_y_publicidad": "REPARTO",
+  "barranquilla|none|docentes_tiempo_completo_barranquilla": "BAQ",
+  "sabaneta|egresados|egresados": "REPARTO",
+  "sabaneta|2303001|infraestructura_tecnologica": "REPARTO",
+  "sabaneta|cdt|cdt": "REPARTO",
+  "sabaneta|acre_y_reg_calificados_p_antig|gestion_de_la_calidad": "REPARTO",
+  "sabaneta|gestion_ambiental|gestion_de_la_calidad": "REPARTO",
+  "sabaneta|investigaciones|investigacion": "REPARTO",
+  "barranquilla|comercial_bqlla|gastos_de_venta_y_publicidad": "BAQ",
+  "sabaneta|registro_y_control|registro_y_control": "REPARTO",
+  "sabaneta|consejeria|consejeria_estudiantil": "REPARTO",
+  "sabaneta|comunicaciones|comunicaciones": "REPARTO",
+  "sabaneta|biblioteca|biblioteca": "REPARTO",
+  "sabaneta|doc_tiempo_completo_sabaneta|docentes_tiempo_completo_plus": "PLUS",
+  "sabaneta|secretaria_general|secretaria_general": "REPARTO",
+  "sabaneta|gestion_de_calidad|gestion_de_la_calidad": "REPARTO",
+  "sabaneta|colegios|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|mto_y_servicios_generales|mantenimiento_y_servicios_generales": "REPARTO",
+  "sabaneta|sst|seguridad_y_salud_en_el_trabajo": "REPARTO",
+  "barranquilla|servicios_al_estudiante|barranquilla": "BAQ",
+  "sabaneta|gestion_de_profesores|gestion_de_profesores": "REPARTO",
+  "sabaneta|administracion_excelencia_e_innovacion|administracion_excelencia_e_innovacion": "REPARTO",
+  "sabaneta|gestion_administrativa|administracion_escuela": "REPARTO",
+  "sabaneta|vicerectoria_academica|investigacion": "REPARTO",
+  "sabaneta|contratacion|contratacion_y_nomina": "REPARTO",
+  "sabaneta|enfermeria|enfermeria": "REPARTO",
+  "sabaneta|call_center|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|gestion_administrativa|gestion_administrativa": "REPARTO",
+  "sabaneta|proyecto_maestrias_jorge|posgrado_maestria": "MAE",
+  "barranquilla|mto_y_ser_generales|barranquilla": "BAQ",
+  "barranquilla|ure|gastos_de_venta_y_publicidad": "BAQ",
+  "sabaneta|admon_laboratorio_financiero|laboratorio_financiero": "REPARTO",
+  "sabaneta|comercial_sabaneta|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|none|isolution": "URE"
+ },
+ "unidadNodo": {
+  "sabaneta|financiera_y_tributaria": "REPARTO",
+  "sabaneta|rectoria": "REPARTO",
+  "sabaneta|gastos_de_venta_y_publicidad": "REPARTO",
+  "sabaneta|vicerrectoria_academica": "REPARTO",
+  "sabaneta|asesores_estudiantes": "REPARTO",
+  "sabaneta|contratacion_y_nomina": "REPARTO",
+  "barranquilla|barranquilla": "BAQ",
+  "sabaneta|sistemas_de_informacion": "REPARTO",
+  "sabaneta|acreditacion_y_registro_calificado": "REPARTO",
+  "sabaneta|docentes_tiempo_completo_pregrado": "PRE",
+  "sabaneta|docentes_tiempo_completo_posgrado": "POS",
+  "sabaneta|internacionalizacion": "REPARTO",
+  "sabaneta|docentes_medio_tiempo_sabaneta": "PRE",
+  "sabaneta|posgrado_maestria": "MAE",
+  "sabaneta|administracion_plus_language": "REPARTO",
+  "sabaneta|proyeccion_profesional": "REPARTO",
+  "barranquilla|docentes_tiempo_completo_barranquilla": "BAQ",
+  "sabaneta|isolution": "URE",
+  "sabaneta|presupuesto": "REPARTO",
+  "sabaneta|egresados": "REPARTO",
+  "sabaneta|infraestructura_tecnologica": "REPARTO",
+  "sabaneta|cdt": "REPARTO",
+  "sabaneta|gestion_de_la_calidad": "REPARTO",
+  "sabaneta|investigacion": "REPARTO",
+  "barranquilla|gastos_de_venta_y_publicidad": "BAQ",
+  "sabaneta|registro_y_control": "REPARTO",
+  "sabaneta|consejeria_estudiantil": "REPARTO",
+  "sabaneta|comunicaciones": "REPARTO",
+  "sabaneta|biblioteca": "REPARTO",
+  "sabaneta|docentes_tiempo_completo_plus": "PLUS",
+  "sabaneta|secretaria_general": "REPARTO",
+  "sabaneta|mantenimiento_y_servicios_generales": "REPARTO",
+  "sabaneta|seguridad_y_salud_en_el_trabajo": "REPARTO",
+  "sabaneta|gestion_de_profesores": "REPARTO",
+  "sabaneta|administracion_excelencia_e_innovacion": "REPARTO",
+  "sabaneta|administracion_escuela": "REPARTO",
+  "sabaneta|enfermeria": "REPARTO",
+  "sabaneta|gestion_administrativa": "REPARTO",
+  "sabaneta|laboratorio_financiero": "REPARTO"
+ }
+}
