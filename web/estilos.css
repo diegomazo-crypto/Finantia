@@ -165,3 +165,15 @@ tr.hijo i { font-style: normal; color: var(--muted); font-size: 11px; margin-lef
 tr.hijo.n2 .enlace { color: var(--ink) }
 .fila-drill select { margin-left: 6px }
 tr.hijo.n1 .enlace { color: var(--ink) }
+
+/* Gráficos mensuales (resultado y caja) */
+svg.grafico { display: block; width: 100%; min-width: 560px; height: auto; font-size: 11px }
+svg.grafico .eje { stroke: var(--line); stroke-width: 1 } svg.grafico .eje.cero { stroke-width: 1.5; stroke: var(--muted) }
+svg.grafico .tick { fill: var(--muted) } svg.grafico .final { fill: var(--ink); font-weight: 600 }
+svg.grafico rect.pos { fill: var(--pos) } svg.grafico rect.neg { fill: var(--neg) }
+svg.grafico .linea { fill: none; stroke: var(--accent); stroke-width: 2.5 } svg.grafico .punto { fill: var(--accent) }
+svg.grafico .ref { stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 5 4 }
+.leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 8px }
+.leyenda b { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px }
+.leyenda b.pos { background: var(--pos) } .leyenda b.neg { background: var(--neg) } .leyenda b.linea { background: var(--accent) } .leyenda b.ref { background: var(--mark) }
+tr.memo td { color: var(--muted); font-style: italic }
