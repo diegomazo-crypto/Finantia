@@ -7,7 +7,7 @@
  * supuestos, nómina por cargo y evaluación del equipo. No hay Microsoft 365, cifrado ni
  * asistente: es para recorrer las pantallas.
  */
-import { crearModelo, DEFAULTS, ESCS, lineasMensuales } from '../motor/index.js';
+import { crearModelo, DEFAULTS, ESCS, FIXED, lineasMensuales } from '../motor/index.js';
 import { puede, veDetalleSensible, ROLES } from '../servidor/admin/permisos.js';
 import { ErrorFinantia } from '../servidor/errores.js';
 import { validarSupuestos, sinAuxiliar } from '../servidor/presupuesto/servicio.js';
@@ -179,7 +179,7 @@ ruta('GET', '/api/planeacion/flujo', ({ a, q }) => {
   if (!v) return { ejercicios: anios, ejercicio: anio, versiones, version: null };
   return { ejercicios: anios, ejercicio: anio, versiones, version: { ...v, ejercicio: anio, resultados: soloFlujo(versionDe(v.id).resultados) } };
 });
-ruta('GET', '/api/presupuesto/versiones/:id', ({ a, p }) => { exigir(a, 'PRESUPUESTO', 'ver'); return { ...vista(versionDe(entero(p.id))), base: S.base, porDefecto: DEFAULTS }; });
+ruta('GET', '/api/presupuesto/versiones/:id', ({ a, p }) => { exigir(a, 'PRESUPUESTO', 'ver'); return { ...vista(versionDe(entero(p.id))), base: S.base, porDefecto: DEFAULTS, cintanaUSD: FIXED.cintanaUSD }; });
 ruta('PATCH', '/api/presupuesto/versiones/:id/supuestos', ({ a, p, b }) => {
   exigir(a, 'PRESUPUESTO', 'editar');
   validarSupuestos(b);

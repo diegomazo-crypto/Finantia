@@ -236,6 +236,22 @@ describe('Motor en el navegador y datos base', () => {
     await ok(pedir('PUT', `/api/admin/usuarios/${con.id}/accesos/PLANEACION`, { como: U.su, cuerpo: { rol: 'VISUALIZACION' } }));
   });
 
+  test('TRM: cambia el pago a CINTANA y el puente del excedente cuadra', async () => {
+    const { id } = await ok(pedir('POST', '/api/presupuesto/versiones', { como: U.adm, cuerpo: { ejercicio: 2027, nombre: 'TRM' } }));
+    const v0 = await ok(pedir('GET', `/api/presupuesto/versiones/${id}`, { como: U.adm }));
+    assert.deepEqual(v0.cintanaUSD.slice(0, 2), [200000, 200000]);
+    const t0 = v0.resultados.Moderado.tot, b = v0.base.base2026;
+    assert.ok(Math.abs(t0.FX - 200000 * v0.porDefecto.Moderado.trm[0]) < 1);
+    // el puente de la pantalla: excedente 2026E + cambios = excedente 2027
+    const puente = b.RN + (t0.NET - b.NET) + (t0.OI - b.OI) - (t0.N - b.N) - (t0.C - b.C) - (t0.V + t0.VI - b.V - b.VI) - (t0.FX - b.FX) - (t0.F - b.F) - (t0.DA - b.DA);
+    assert.ok(Math.abs(puente - t0.RN) < 1);
+    assert.equal((await pedir('PATCH', `/api/presupuesto/versiones/${id}/supuestos`, { como: U.adm, cuerpo: { params: { Moderado: { trm: [4.2, 4100, 4200, 4300, 4400] } } } })).status, 422);
+    await ok(pedir('PATCH', `/api/presupuesto/versiones/${id}/supuestos`, { como: U.adm, cuerpo: { params: { Moderado: { trm: [4500, 4100, 4200, 4300, 4400] } } } }));
+    const t1 = (await ok(pedir('GET', `/api/presupuesto/versiones/${id}`, { como: U.adm }))).resultados.Moderado.tot;
+    assert.ok(Math.abs(t1.FX - 200000 * 4500) < 1);
+    assert.ok(Math.abs((t0.RN - t1.RN) - 200000 * (4500 - v0.porDefecto.Moderado.trm[0])) < 1);
+  });
+
   test('metas por intake: valida unidad y cantidad de intakes', async () => {
     const { id } = await ok(pedir('POST', '/api/presupuesto/versiones', { como: U.adm, cuerpo: { ejercicio: 2027, nombre: 'Metas' } }));
     const patch = metas => pedir('PATCH', `/api/presupuesto/versiones/${id}/supuestos`, { como: U.adm, cuerpo: { metas } });

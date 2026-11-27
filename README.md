@@ -28,7 +28,7 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 |---|---|
 | Presupuesto › Ejercicios | Ejercicios abiertos, sus versiones y su estado; crear una versión desde cero o como copia de otra |
 | Presupuesto › Archivos | Soportes del ejercicio (Excel, CSV, PDF…, hasta 15 MB): subir, descargar y retirar; quedan en la bitácora |
-| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro. Ver Total CEIPA o una unidad. Drill down de tres niveles como en Finantia Admon 1.0: rubro → línea → centro de costos → cuenta (reparto del auxiliar contable 2026, `DD`/`CCN`/`CTN` en datos/base2026.json, que el servidor solo entrega a quien tiene el detalle sensible; sin él se ven las líneas con la nómina agrupada). Los subtotales se abren por unidad |
+| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA, puente del excedente 2026E al 2027 (con CINTANA aparte) y nómina dentro de cada rubro. Ver Total CEIPA o una unidad. Drill down de tres niveles como en Finantia Admon 1.0: rubro → línea → centro de costos → cuenta (reparto del auxiliar contable 2026, `DD`/`CCN`/`CTN` en datos/base2026.json, que el servidor solo entrega a quien tiene el detalle sensible; sin él se ven las líneas con la nómina agrupada). Los subtotales se abren por unidad |
 | Versión › Ingresos | Puente del ingreso por unidad y por escenario, metas de nuevos por intake (editables), maestrías por cohortes y Barranquilla |
 | Versión › Costo de prestación | Costo por unidad, Vértice frente a tradicional, topes por grupo (editables) y programación académica optimizada (se aplica al escenario) |
 | Versión › Sensibilidad | Tornado, punto de equilibrio y metas inversas, tablas volumen × descuento y volumen × SMMLV |
@@ -38,7 +38,7 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 | Versión › Por unidad | Estado de resultados de las siete unidades (cada rubro se abre en sus líneas del presupuesto), EBITDA por unidad e ingreso neto frente a 2026E |
 | Planeación financiera › Flujo de caja | Como en Finantia Admon 1.0: gráfico y detalle del resultado mensual con la estructura CEIPA (año y % del ingreso neto), y flujo de caja por método directo con gráfico (flujo neto, saldo final y saldo mínimo deseado) y detalle de entradas y salidas (recaudo, otros ingresos, nómina, prima, cesantías, intereses, proveedores, bancarios, capex). Toma la versión aprobada del ejercicio (o la última) y no muestra supuestos ni nómina; el acceso es el del módulo Planeación financiera. Después: saldos de bancos semanales y proyección del mes por semana |
 | Versión › Proyección y NPV | 2026E–2031, FCF, NPV al 12%, TIR y payback simple y descontado |
-| Versión › Supuestos | Supuestos por escenario y por unidad; editables solo en borrador y por el rol Administración |
+| Versión › Supuestos | Supuestos por escenario y por unidad, y la TRM 2027–2031 con el pago a CINTANA en pesos (USD 200.000 en 2027 y 2028); editables solo en borrador y por el rol Administración |
 | Versión › Aprobación | Enviar, aprobar o devolver con observaciones, decisiones, líneas presupuestales aprobadas e historial |
 | Administración | Usuarios y su rol en cada módulo, número y orden de aprobaciones, bitácora con filtros |
 

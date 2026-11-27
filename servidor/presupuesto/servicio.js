@@ -83,6 +83,7 @@ export function validarSupuestos(s) {
       for (const e of Object.keys(s.params)) {
         if (!ESCS.includes(e)) err(`escenario desconocido ${e}`);
         forma(s.params[e], { ...DEFAULTS[e], tope: {} }, `params.${e}`);
+        if (s.params[e].trm && s.params[e].trm.some(x => x < 500 || x > 50000)) err(`params.${e}.trm: la TRM va en pesos por dólar (entre 500 y 50.000)`);
       }
     } else if (k === 'metas') {
       for (const [mk, mv] of Object.entries(s.metas)) {

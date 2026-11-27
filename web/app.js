@@ -212,6 +212,20 @@ function arbol(tabla) {
 }
 async function detalleSeguro(v) { try { return await detalleLineas(v); } catch { return null; } }
 
+/** Del excedente 2026E al de cada escenario (el puente de Finantia Admon 1.0), con CINTANA aparte. */
+function puenteExcedente(v) {
+  const b = v.base.base2026, R = v.resultados;
+  const pasos = [['Ingreso neto', t => t.NET - b.NET], ['Otros ingresos (con ESIC)', t => t.OI - b.OI], ['Nómina', t => -(t.N - b.N)], ['Cátedra y mentores', t => -(t.C - b.C)],
+    ['Variables y ligados al ingreso', t => -(t.V + t.VI - b.V - b.VI)], ['CINTANA', t => -(t.FX - b.FX)], ['Fijos, ESIC y no recurrentes', t => -(t.F - b.F)], ['Depreciación y amortización', t => -(t.DA - b.DA)]];
+  return `<div class="tarjeta"><h3>Del excedente 2026E al ${v.ejercicio}</h3>
+    <p class="nota">Cuánto suma o resta cada concepto al resultado neto frente a 2026E. Millones de pesos; un valor negativo es un mayor costo o un menor ingreso. CINTANA = USD ${nf0.format(v.cintanaUSD?.[0] ?? 0)} × la TRM ${v.ejercicio} del escenario (ver Supuestos).</p>
+    <div class="tabla-cont"><table><thead><tr><th>Concepto</th>${ESCS.map(e => `<th>${e}</th>`).join('')}</tr></thead><tbody>
+    <tr class="sub"><td>Excedente 2026E</td>${ESCS.map(() => `<td class="${cls(b.RN)}">${Mn(b.RN)}</td>`).join('')}</tr>
+    ${pasos.map(([t, f]) => `<tr class="det"><td>${t}</td>${ESCS.map(e => { const x = f(R[e].tot); return `<td class="${cls(x)}">${Mn(x)}</td>`; }).join('')}</tr>`).join('')}
+    <tr class="total"><td>Excedente ${v.ejercicio}</td>${ESCS.map(e => `<td class="${cls(R[e].tot.RN)}">${Mn(R[e].tot.RN)}</td>`).join('')}</tr>
+    </tbody></table></div></div>`;
+}
+
 async function vResumen(c, v) {
   const b0 = v.base.eerr2026, R = v.resultados, BU = v.base.eerr2026Unidades, n = v.base.names;
   const D = await detalleSeguro(v), aux = !!D?.DD;
@@ -260,6 +274,7 @@ async function vResumen(c, v) {
     }).join('')}
     <tr><td>Margen EBITDA</td><td>${P(b.NET ? b.EBITDA / b.NET : null)}</td>${ESCS.map(e => `<td>${P(eerr(e).NET ? eerr(e).EBITDA / eerr(e).NET : null)}</td>`).join('')}<td></td></tr>
     </tbody></table></div></div>
+    ${ui < 0 ? puenteExcedente(v) : ''}
     <div class="tarjeta"><h3>Nómina dentro de cada rubro (escenario Moderado${ui < 0 ? '' : ' · ' + esc(n[ui])})</h3>
     <div class="tabla-cont"><table><thead><tr><th>Rubro</th><th>Nómina 2026E</th><th>Nómina ${v.ejercicio}</th><th>% del rubro ${v.ejercicio}</th></tr></thead><tbody>
     ${EERR.filter(x => x[2] === 'det' && eerr('Moderado')['n_' + x[0]]).map(([k, t]) => { const e = eerr('Moderado'); return `<tr><td>${t}</td><td>${Mn(b['n_' + k])}</td><td>${Mn(e['n_' + k])}</td><td>${P(e[k] ? e['n_' + k] / e[k] : null)}</td></tr>`; }).join('')}
@@ -324,10 +339,20 @@ function vSupuestos(c, v) {
   };
   c.innerHTML = `<div class="tarjeta"><div class="cabeza"><h2>Supuestos por escenario</h2>
       <div class="acciones">${editable ? '<button class="btn primario" id="guardar" type="button" disabled>Guardar y recalcular</button>' : ''}</div></div>
-    <p class="nota">${editable ? 'Valores en porcentaje. Los cambios quedan en la bitácora con el valor anterior.' : v.estado === 'BORRADOR' ? 'Solo lectura: su rol no edita supuestos.' : 'Solo lectura: la versión ya no es un borrador. Para cambiarla, cree una copia.'} Marcados con • los que difieren del valor por defecto.</p>
+    <p class="nota">${editable ? 'Valores en porcentaje (la TRM, en pesos). Los cambios quedan en la bitácora con el valor anterior.' : v.estado === 'BORRADOR' ? 'Solo lectura: su rol no edita supuestos.' : 'Solo lectura: la versión ya no es un borrador. Para cambiarla, cree una copia.'} Marcados con • los que difieren del valor por defecto.</p>
     <div class="tabla-cont"><table><thead><tr><th>Supuesto</th>${ESCS.map(e => `<th>${e}</th>`).join('')}</tr></thead><tbody>
     ${SUP_ESC.map(([k, t]) => `<tr><td>${t}</td>${ESCS.map(e => `<td>${cambiado(e, k) ? '• ' : ''}${inp(e, k, val(e, k))}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></div>
+    <div class="tarjeta"><h3>TRM y pago a CINTANA</h3>
+      <p class="nota">TRM en pesos por dólar. El pago a CINTANA es de USD ${nf0.format(v.cintanaUSD?.[0] ?? 0)} al año en ${(v.cintanaUSD || []).map((u, i) => u ? v.ejercicio + i : null).filter(Boolean).join(' y ')}; el contrato sigue vigente en ${v.ejercicio + 2} sin pago y luego termina, así que la TRM de esos años no cambia el resultado. El costo va en Dirección institucional (línea Cintana) y, en 2026E, fue de ${M(v.base.base2026.FX)}.</p>
+      <div class="tabla-cont"><table><thead><tr><th>Escenario</th>${val('Moderado', 'trm').map((_, i) => `<th>TRM ${v.ejercicio + i}</th>`).join('')}</tr></thead><tbody>
+      ${ESCS.map(e => `<tr><td>${cambiado(e, 'trm') ? '• ' : ''}${e}</td>${val(e, 'trm').map((x, i) => `<td>${editable ? `<input class="inp-num" type="number" step="50" min="1000" inputmode="decimal" data-k="${e}.trm.${i}" data-cop="1" value="${x}" aria-label="TRM ${v.ejercicio + i} ${e}">` : nf0.format(x)}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>
+      <h4>Pago a CINTANA en pesos</h4>
+      <div class="tabla-cont"><table><thead><tr><th>Escenario</th>${val('Moderado', 'trm').map((_, i) => `<th>${v.ejercicio + i}</th>`).join('')}</tr></thead><tbody>
+      <tr class="det"><td>USD</td>${val('Moderado', 'trm').map((_, i) => `<td>${nf0.format(v.cintanaUSD?.[i] || 0)}</td>`).join('')}</tr>
+      ${ESCS.map(e => `<tr><td>${e}</td>${val(e, 'trm').map((x, i) => `<td>${Mn((v.cintanaUSD?.[i] || 0) * x)}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div><p class="nota">Millones de pesos.</p></div>
     ${SUP_UNI.map(([k, t]) => `<div class="tarjeta"><h3>${t} por unidad</h3><div class="tabla-cont"><table><thead><tr><th>Escenario</th>${v.base.names.map(n => `<th>${esc(n)}</th>`).join('')}</tr></thead><tbody>
       ${ESCS.map(e => `<tr><td>${cambiado(e, k) ? '• ' : ''}${e}</td>${val(e, k).map((x, i) => `<td>${inp(e, k, x, i)}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></div>`).join('')}`;
@@ -335,7 +360,7 @@ function vSupuestos(c, v) {
   const pend = {};
   c.addEventListener('input', e => {
     const k = e.target.dataset.k; if (!k) return;
-    pend[k] = Number(e.target.value) / 100; $('#guardar').disabled = !Object.keys(pend).length;
+    pend[k] = Number(e.target.value) / (e.target.dataset.cop ? 1 : 100); $('#guardar').disabled = !Object.keys(pend).length;
   });
   $('#guardar').onclick = async () => {
     const params = {};

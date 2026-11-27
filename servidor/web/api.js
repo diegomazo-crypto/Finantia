@@ -7,7 +7,7 @@ import * as EV from '../presupuesto/evaluacion.js';
 import * as PL from '../planeacion/servicio.js';
 import { TAMANO_MAXIMO as NOMINA_MAX } from '../presupuesto/nomina.js';
 import { falla, DATOS_INVALIDOS } from '../errores.js';
-import { DEFAULTS } from '../../motor/parametros.js';
+import { DEFAULTS, FIXED } from '../../motor/parametros.js';
 
 const ruta = (metodo, patron, fn, extra = {}) => ({ metodo, patron: new RegExp('^' + patron.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), fn, ...extra });
 const entero = v => { const n = Number(v); if (!Number.isInteger(n)) falla(DATOS_INVALIDOS, `Número inválido: ${v}`); return n; };
@@ -57,7 +57,7 @@ export function rutasApi(db, auth, asistente, nomina) {
     }) })),
     ruta('GET', '/api/presupuesto/versiones/:id', async ({ actor, params }) => {
       const v = await P.obtenerVersion(db, actor, entero(params.id));
-      return { ...v, base: await P.contextoBase(db, actor, v.datos_base_id), porDefecto: DEFAULTS };
+      return { ...v, base: await P.contextoBase(db, actor, v.datos_base_id), porDefecto: DEFAULTS, cintanaUSD: FIXED.cintanaUSD };
     }),
     ruta('PATCH', '/api/presupuesto/versiones/:id/supuestos', ({ actor, params, body }) => P.editarSupuestos(db, actor, entero(params.id), body)),
     ruta('POST', '/api/presupuesto/versiones/:id/enviar', ({ actor, params }) => P.enviarARevision(db, actor, entero(params.id))),
