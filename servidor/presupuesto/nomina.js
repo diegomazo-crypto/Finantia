@@ -132,7 +132,7 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
     if (!/\.(csv|txt)$/i.test(n)) falla(DATOS_INVALIDOS, 'Suba la nómina como CSV (en Excel: Archivo › Guardar como › CSV UTF-8)');
     if (!Buffer.isBuffer(contenido) || !contenido.length) falla(DATOS_INVALIDOS, 'El archivo está vacío');
     const texto = contenido.toString('utf8');
-    if (texto.includes('�')) falla(DATOS_INVALIDOS, 'El archivo no está en UTF-8. En Excel use "CSV UTF-8 (delimitado por comas)".');
+    if (texto.includes('\uFFFD')) falla(DATOS_INVALIDOS, 'El archivo no está en UTF-8. En Excel use "CSV UTF-8 (delimitado por comas)".');
     const filas = interpretarNomina(texto);
     const personas = filas.reduce((s, f) => s + f.continuan + f.nuevos + f.vacantes, 0);
     const costo = filas.reduce((s, f) => s + f.costoAnual, 0);

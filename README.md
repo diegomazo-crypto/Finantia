@@ -18,6 +18,10 @@ npm run demo        # http://localhost:3000
 
 Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo, uno por rol, y la versión 1 del presupuesto 2027. En modo de desarrollo no se usa Microsoft 365: la pantalla de ingreso deja elegir el usuario.
 
+### Demostración sin servidor
+
+`node herramientas/demo_enlace.mjs CARPETA` arma una copia de las pantallas que funciona sola en el navegador: `demo-enlace/api.js` responde las llamadas de la API en memoria con el mismo motor, las mismas reglas de permisos y las mismas validaciones. Sirve para mostrar Finantia sin instalar nada. Los cambios se pierden al recargar, y no hay Microsoft 365, cifrado ni asistente.
+
 ## Pantallas
 
 | Sección | Qué muestra |
