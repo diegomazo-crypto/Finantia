@@ -67,3 +67,24 @@ export function flujoCaja(datos, p, r, g, mon, b26) {
   const saldoMinimo = Math.min(...cf.map(x => x.SF));
   return { meses: cf, saldoFinal: saldo, saldoMinimo, mesMinimo: cf.findIndex(x => x.SF === saldoMinimo), mesesBajoMinimo: cf.filter(x => x.SF < K.sm).length };
 }
+
+/**
+ * Líneas presupuestales mensuales: cada renglón de Base2026 × unidad × mes.
+ * Ingresos y descuentos con la estacionalidad de su unidad; nómina y cátedra con S.NOM;
+ * el resto de costos con S.COS (las mismas reglas de mensualPyG, así que suman lo mismo).
+ * @param {object} datos  base2026.json (usa L, seas, units)
+ * @param {object} g      resultado de pyg() del escenario
+ * @returns {{linea: number, codigo: string, bloque: string, unidad: string, mes: number, valor: number}[]}
+ */
+export function lineasMensuales(datos, g) {
+  const S = datos.seas, U = datos.units, out = [];
+  datos.L.forEach(([bloque, codigo], li) => {
+    U.forEach((u, i) => {
+      const v = g.units[i].ln[li];
+      if (!v) return;
+      const w = codigo === 'IB' || codigo === 'DS' ? S[u] : codigo === 'N' || codigo === 'C' ? S.NOM : S.COS;
+      for (let m = 0; m < 12; m++) out.push({ linea: li, codigo, bloque, unidad: u, mes: m + 1, valor: v * w[m] });
+    });
+  });
+  return out;
+}

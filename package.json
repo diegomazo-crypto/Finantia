@@ -2,12 +2,21 @@
   "name": "finantia",
   "version": "2.0.0-alpha.1",
   "private": true,
-  "description": "Finantia 2.0: plataforma financiera de CEIPA. Motor de cálculo del presupuesto (módulo Presupuesto).",
+  "description": "Finantia 2.0: plataforma financiera de CEIPA. Motor de cálculo, base de datos y módulos de Administración y Presupuesto.",
   "type": "module",
   "main": "motor/index.js",
   "scripts": {
     "test": "node --test pruebas/*.test.js",
-    "resumen": "node herramientas/resumen.js"
+    "resumen": "node herramientas/resumen.js",
+    "inicializar": "node herramientas/inicializar.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.15"
+  },
+  "dependencies": {
+    "pg": "8.16.3"
+  }
 }
