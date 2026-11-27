@@ -190,6 +190,21 @@ describe('Presupuesto: versión, supuestos y aprobación', () => {
     await A.configurarAprobacion(db, su, 'PRESUPUESTO', { aprobacionesRequeridas: 1 });
   });
 
+  test('borrar versiones: borrador quien edita, reemplazada solo el Superusuario, la aprobada nunca', async () => {
+    const [r1, , ap] = await P.listarVersiones(db, vis, 2027);
+    const v4 = await P.crearVersion(db, adm, { ejercicio: 2027, nombre: 'Prueba para borrar', copiaDe: ap.id });
+    await rechaza(P.borrarVersion(db, vis, v4), 'NO_AUTORIZADO');
+    assert.deepEqual(await P.borrarVersion(db, adm, v4), { borrada: v4 });
+    await rechaza(P.obtenerVersion(db, adm, v4), 'NO_ENCONTRADO');
+    await rechaza(P.borrarVersion(db, adm, r1.id), 'NO_AUTORIZADO');
+    await rechaza(P.borrarVersion(db, su, ap.id), 'ESTADO_INVALIDO');
+    await P.borrarVersion(db, su, r1.id);
+    assert.deepEqual((await P.listarVersiones(db, vis, 2027)).map(x => x.estado), ['REEMPLAZADA', 'APROBADA']);
+    const b = (await db.query(`SELECT antes FROM bitacora WHERE accion = 'BORRAR_VERSION' ORDER BY id DESC LIMIT 1`)).rows[0].antes;
+    const antes = typeof b === 'string' ? JSON.parse(b) : b;
+    assert.equal(antes.estado, 'REEMPLAZADA'); assert.ok(antes.resumen.Moderado.RN, 'guarda el resumen para reconstruirla');
+  });
+
   test('quitar el rol Aprobación lo saca del orden de aprobadores', async () => {
     await A.configurarAprobacion(db, su, 'PRESUPUESTO', { aprobacionesRequeridas: 1, enOrden: true, aprobadores: [ids.ap2] });
     await A.asignarAcceso(db, su, ids.ap2, 'PRESUPUESTO', 'VISUALIZACION');

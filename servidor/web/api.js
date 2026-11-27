@@ -60,6 +60,7 @@ export function rutasApi(db, auth, asistente, nomina) {
       return { ...v, base: await P.contextoBase(db, actor, v.datos_base_id), porDefecto: DEFAULTS, cintanaUSD: FIXED.cintanaUSD };
     }),
     ruta('PATCH', '/api/presupuesto/versiones/:id/supuestos', ({ actor, params, body }) => P.editarSupuestos(db, actor, entero(params.id), body)),
+    ruta('DELETE', '/api/presupuesto/versiones/:id', ({ actor, params }) => P.borrarVersion(db, actor, entero(params.id))),
     ruta('POST', '/api/presupuesto/versiones/:id/enviar', ({ actor, params }) => P.enviarARevision(db, actor, entero(params.id))),
     ruta('POST', '/api/presupuesto/versiones/:id/aprobar', ({ actor, params, body }) => P.aprobar(db, actor, entero(params.id), { observaciones: body.observaciones || null, escenarioOficial: body.escenarioOficial || null })),
     ruta('POST', '/api/presupuesto/versiones/:id/devolver', ({ actor, params, body }) => P.devolver(db, actor, entero(params.id), body.observaciones)),

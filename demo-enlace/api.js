@@ -190,6 +190,17 @@ ruta('PATCH', '/api/presupuesto/versiones/:id/supuestos', ({ a, p, b }) => {
   v.supuestos = mezclar(v.supuestos, b); recalcular(v);
   reg(a.id, 'PRESUPUESTO', 'EDITAR_SUPUESTOS', { entidad: 'version', entidad_id: String(v.id), despues: b });
 });
+ruta('DELETE', '/api/presupuesto/versiones/:id', ({ a, p }) => {
+  exigir(a, 'PRESUPUESTO', 'editar');
+  const v = versionDe(entero(p.id));
+  if (v.estado === 'APROBADA') falla('ESTADO_INVALIDO', 'La versión aprobada no se puede borrar: es la que se ejecuta. Apruebe otra versión primero; la actual pasará a reemplazada.');
+  if (v.estado !== 'BORRADOR' && !a.es_superusuario) falla('NO_AUTORIZADO', 'Solo el Superusuario borra una versión que no está en borrador');
+  S.versiones = S.versiones.filter(x => x !== v);
+  S.versiones.forEach(x => { if (x.copia_de === v.id) x.copia_de = null; if (x.reemplazada_por === v.id) x.reemplazada_por = null; });
+  S.decisiones = S.decisiones.filter(d => d.version_id !== v.id);
+  reg(a.id, 'PRESUPUESTO', 'BORRAR_VERSION', { entidad: 'version', entidad_id: String(v.id), antes: { ejercicio: v.ejercicio, numero: v.numero, nombre: v.nombre, estado: v.estado } });
+  return { borrada: v.id };
+});
 ruta('POST', '/api/presupuesto/versiones/:id/enviar', ({ a, p }) => {
   exigir(a, 'PRESUPUESTO', 'editar');
   const v = versionDe(entero(p.id));

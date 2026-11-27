@@ -126,7 +126,9 @@ async function pantallaEjercicios(anio) {
           <span class="estado ${v.estado}">${ESTADOS[v.estado]}</span>
           <a class="nombre" href="#/presupuesto/v/${v.id}">V${v.numero} · ${esc(v.nombre)}</a>
           ${v.ronda > 1 ? `<span class="nota">ronda ${v.ronda}</span>` : ''}
-          <span class="der">Creada ${fecha(v.creada_en)}${v.aprobada_en ? ' · aprobada ' + fecha(v.aprobada_en) : ''}</span></li>`).join('')}</ul>`
+          <span class="der">Creada ${fecha(v.creada_en)}${v.aprobada_en ? ' · aprobada ' + fecha(v.aprobada_en) : ''}
+          ${mod.editar && v.estado !== 'APROBADA' && (v.estado === 'BORRADOR' || sesion.perfil.superusuario) ? ` <button type="button" class="btn peligro chico" data-borrar="${v.id}" data-nombre="V${v.numero}">Borrar</button>` : ''}</span></li>`).join('')}</ul>
+        ${mod.editar ? '<p class="nota">Un borrador lo puede borrar quien edita; una versión en revisión o reemplazada, solo el Superusuario. La versión aprobada no se borra. Al borrar queda constancia en la bitácora.</p>' : ''}`
         : '<p class="nota">Este ejercicio todavía no tiene versiones.</p>'}
       ${mod.editar ? `<form class="formfila" id="nueva-v">
           <label class="campo">Nombre de la versión<input name="nombre" required maxlength="120" placeholder="Ej.: Presupuesto ${anio} · ajuste de nómina"></label>
@@ -135,6 +137,10 @@ async function pantallaEjercicios(anio) {
     </div><section id="archivos"></section>` : '<div class="tarjeta"><p class="nota">Todavía no hay ejercicios abiertos.</p></div>'}`;
   if (ej) vArchivos($('#archivos'), anio).catch(e => { $('#archivos').innerHTML = `<div class="tarjeta"><p class="nota">${esc(e.message)}</p></div>`; });
 
+  app.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
+    if (b.dataset.confirmar !== '1') { b.dataset.confirmar = '1'; b.textContent = `¿Borrar ${b.dataset.nombre}? Confirmar`; return; }
+    try { await accion(() => api('DELETE', `/api/presupuesto/versiones/${b.dataset.borrar}`), `${b.dataset.nombre} borrada`); pantallaEjercicios(anio); } catch { /* aviso ya mostrado */ }
+  }));
   $('#nuevo-ej')?.addEventListener('click', () => accion(() => api('POST', '/api/presupuesto/ejercicios', { anio: sig }), `Ejercicio ${sig} abierto`).then(() => { location.hash = '#/presupuesto/' + sig; }));
   $('#nueva-v')?.addEventListener('submit', async e => {
     e.preventDefault(); const f = new FormData(e.target);

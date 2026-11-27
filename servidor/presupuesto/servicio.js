@@ -309,6 +309,30 @@ export async function devolver(db, actor, versionId, observaciones) {
 
 /* ---------- consultas ---------- */
 
+/**
+ * Borra una versión. Un borrador lo borra quien edita el presupuesto; una versión en revisión o
+ * reemplazada, solo el Superusuario. La aprobada no se borra nunca: es la que se ejecuta y se audita.
+ * Se borran sus resultados, decisiones, líneas y preguntas; en la bitácora queda una copia
+ * (nombre, estado, supuestos y resumen de los tres escenarios) para poder reconstruirla.
+ */
+export async function borrarVersion(db, actor, versionId) {
+  exigir(actor, M, 'editar');
+  return db.tx(async t => {
+    const v = await leerVersion(t, versionId, true);
+    if (v.estado === 'APROBADA') falla(ESTADO_INVALIDO, 'La versión aprobada no se puede borrar: es la que se ejecuta. Apruebe otra versión primero; la actual pasará a reemplazada.');
+    if (v.estado !== 'BORRADOR' && !actor.es_superusuario) falla(NO_AUTORIZADO, `Solo el Superusuario borra una versión ${v.estado === 'EN_REVISION' ? 'en revisión' : 'reemplazada'}`);
+    const resumen = Object.fromEntries((await t.query('SELECT escenario, resumen FROM resultado WHERE version_id = $1', [v.id])).rows
+      .map(r => { const x = typeof r.resumen === 'string' ? JSON.parse(r.resumen) : r.resumen; return [r.escenario, x.tot ? { NET: x.tot.NET, EBITDA: x.tot.EBITDA, RN: x.tot.RN } : null]; }));
+    await t.query('UPDATE version SET copia_de = NULL WHERE copia_de = $1', [v.id]);
+    await t.query('UPDATE version SET reemplazada_por = NULL WHERE reemplazada_por = $1', [v.id]);
+    for (const tabla of ['pregunta', 'linea_presupuestal', 'decision_aprobacion', 'resultado']) await t.query(`DELETE FROM ${tabla} WHERE version_id = $1`, [v.id]);
+    await t.query('DELETE FROM version WHERE id = $1', [v.id]);
+    await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'BORRAR_VERSION', entidad: 'version', entidadId: v.id,
+      antes: { ejercicio: v.ejercicio, numero: v.numero, nombre: v.nombre, estado: v.estado, datosBaseId: v.datos_base_id, supuestos: v.supuestos, resumen } });
+    return { borrada: v.id };
+  });
+}
+
 export async function listarVersiones(db, actor, ejercicio) {
   exigir(actor, M, 'ver');
   return (await db.query('SELECT id, numero, nombre, estado, escenario_oficial, ronda, creada_en, enviada_en, aprobada_en, reemplazada_por FROM version WHERE ejercicio = $1 ORDER BY numero', [ejercicio])).rows
