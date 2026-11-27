@@ -10,7 +10,7 @@
 import { crearModelo, DEFAULTS, ESCS, lineasMensuales } from '../motor/index.js';
 import { puede, veDetalleSensible, ROLES } from '../servidor/admin/permisos.js';
 import { ErrorFinantia } from '../servidor/errores.js';
-import { validarSupuestos } from '../servidor/presupuesto/servicio.js';
+import { validarSupuestos, sinAuxiliar } from '../servidor/presupuesto/servicio.js';
 import { interpretarNomina } from '../servidor/presupuesto/nomina.js';
 import { validarEvaluacion, EJERCICIOS as EJ_EVALUACION } from '../servidor/presupuesto/evaluacion.js';
 
@@ -154,7 +154,7 @@ ruta('POST', '/api/presupuesto/ejercicios', ({ a, b }) => {
   reg(a.id, 'PRESUPUESTO', 'CREAR_EJERCICIO', { entidad: 'ejercicio', entidad_id: String(anio) });
 });
 ruta('GET', '/api/presupuesto/datos-base', ({ a }) => { exigir(a, 'PRESUPUESTO', 'ver'); return [{ id: 1, anio_base: 2026, descripcion: 'Base 2026E (Excel v21)', huella: '—', cargado_en: S.ejercicios[0].creado_en }]; });
-ruta('GET', '/api/presupuesto/datos-base/:id', ({ a }) => { exigir(a, 'PRESUPUESTO', 'ver'); return S.datos; });
+ruta('GET', '/api/presupuesto/datos-base/:id', ({ a }) => { exigir(a, 'PRESUPUESTO', 'ver'); return sinAuxiliar(S.datos, a); });
 ruta('GET', '/api/presupuesto/ejercicios/:anio/versiones', ({ a, p }) => {
   exigir(a, 'PRESUPUESTO', 'ver');
   return S.versiones.filter(v => v.ejercicio === Number(p.anio)).map(({ id, numero, nombre, estado, escenario_oficial, ronda, creada_en, enviada_en, aprobada_en, reemplazada_por }) => ({ id, numero, nombre, estado, escenario_oficial, ronda, creada_en, enviada_en, aprobada_en, reemplazada_por }));

@@ -28,7 +28,7 @@ Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo,
 |---|---|
 | Presupuesto › Ejercicios | Ejercicios abiertos, sus versiones y su estado; crear una versión desde cero o como copia de otra |
 | Presupuesto › Archivos | Soportes del ejercicio (Excel, CSV, PDF…, hasta 15 MB): subir, descargar y retirar; quedan en la bitácora |
-| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro. Drill down: cada renglón se abre por línea del presupuesto o por unidad, y dentro de cada una la otra dimensión |
+| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro. Ver Total CEIPA o una unidad. Drill down de tres niveles como en Finantia Admon 1.0: rubro → línea → centro de costos → cuenta (reparto del auxiliar contable 2026, `DD`/`CCN`/`CTN` en datos/base2026.json, que el servidor solo entrega a quien tiene el detalle sensible; sin él se ven las líneas con la nómina agrupada). Los subtotales se abren por unidad |
 | Versión › Ingresos | Puente del ingreso por unidad y por escenario, metas de nuevos por intake (editables), maestrías por cohortes y Barranquilla |
 | Versión › Costo de prestación | Costo por unidad, Vértice frente a tradicional, topes por grupo (editables) y programación académica optimizada (se aplica al escenario) |
 | Versión › Sensibilidad | Tornado, punto de equilibrio y metas inversas, tablas volumen × descuento y volumen × SMMLV |

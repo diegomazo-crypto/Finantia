@@ -160,4 +160,8 @@ tr.hijo td { font-weight: 400; font-size: 12px; background: var(--surface) }
 tr.hijo td:first-child { color: var(--muted); white-space: normal; min-width: 220px }
 tr.hijo.n1 td:first-child { padding-left: 40px }
 tr.hijo.n2 td:first-child { padding-left: 64px }
+tr.hijo.n3 td:first-child { padding-left: 88px }
+tr.hijo i { font-style: normal; color: var(--muted); font-size: 11px; margin-left: 4px }
+tr.hijo.n2 .enlace { color: var(--ink) }
+.fila-drill select { margin-left: 6px }
 tr.hijo.n1 .enlace { color: var(--ink) }

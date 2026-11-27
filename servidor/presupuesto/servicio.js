@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { crearModelo, DEFAULTS, ESCS, FIXED, lineasMensuales } from '../../motor/index.js';
-import { exigir } from '../admin/permisos.js';
+import { exigir, veDetalleSensible } from '../admin/permisos.js';
 import { registrar } from '../admin/bitacora.js';
 import { falla, DATOS_INVALIDOS, NO_ENCONTRADO, ESTADO_INVALIDO, NO_AUTORIZADO } from '../errores.js';
 
@@ -311,7 +311,14 @@ export async function contenidoDatosBase(db, actor, id) {
   exigir(actor, M, 'ver');
   const r = (await db.query('SELECT contenido FROM datos_base WHERE id = $1', [id])).rows[0];
   if (!r) falla(NO_ENCONTRADO, `No existen los datos base ${id}`);
-  return typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido;
+  return sinAuxiliar(typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido, actor);
+}
+
+/** El reparto por centro de costos y cuenta (auxiliar contable) solo va a quien ve el detalle sensible. */
+export function sinAuxiliar(datos, actor) {
+  if (veDetalleSensible(actor, M)) return datos;
+  const { DD, CCN, CTN, ...resto } = datos;
+  return resto;
 }
 
 const cacheBase = new Map();

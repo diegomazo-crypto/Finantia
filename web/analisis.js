@@ -29,7 +29,7 @@ export async function detalleLineas(v) {
   const { modelo, datos, cuadra } = await modeloDe(v);
   const g26 = modelo.pyg2026();
   const escs = Object.fromEntries(ESCS.map(e => [e, modelo.escenario(e).pyg]));
-  return { L: datos.L, LN: datos.LN, g26, esc: escs, cuadra };
+  return { L: datos.L, LN: datos.LN, DD: datos.DD, CCN: datos.CCN, CTN: datos.CTN, g26, esc: escs, cuadra };
 }
 
 const editable = v => modulo('PRESUPUESTO').editar && v.estado === 'BORRADOR';

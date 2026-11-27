@@ -204,6 +204,10 @@ describe('Motor en el navegador y datos base', () => {
     const m = crearModelo(datos, v.supuestos);
     for (const e of ['Pesimista', 'Moderado', 'Optimista']) assert.ok(Math.abs(m.run(m.params[e]).tot.RN - v.resultados[e].tot.RN) < 1, e);
     assert.equal((await pedir('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`)).status, 401);
+    // El reparto por centro de costos y cuenta solo llega a quien ve el detalle sensible
+    assert.equal(datos.DD, undefined); assert.equal(datos.CCN, undefined); assert.equal(datos.CTN, undefined);
+    const conAux = await ok(pedir('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`, { como: U.adm }));
+    assert.ok(conAux.DD && conAux.CCN.length && conAux.CTN.length);
   });
 
   test('metas por intake: valida unidad y cantidad de intakes', async () => {
