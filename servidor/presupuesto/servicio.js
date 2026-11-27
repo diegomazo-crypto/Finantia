@@ -289,3 +289,37 @@ export async function lineasPresupuestales(db, actor, versionId, { unidad = null
   return (await db.query(`SELECT linea, codigo, bloque, unidad, mes, valor FROM linea_presupuestal WHERE version_id = $1 AND ($2::text IS NULL OR unidad = $2) AND ($3::int IS NULL OR mes = $3) ORDER BY linea, unidad, mes`,
     [versionId, unidad, mes])).rows.map(r => ({ ...r, valor: Number(r.valor) }));
 }
+
+export async function listarEjercicios(db, actor) {
+  exigir(actor, M, 'ver');
+  return (await db.query(`SELECT e.anio, e.estado, e.creado_en,
+      (SELECT count(*)::int FROM version v WHERE v.ejercicio = e.anio) AS versiones,
+      (SELECT v.id FROM version v WHERE v.ejercicio = e.anio AND v.estado = 'APROBADA') AS aprobada
+    FROM ejercicio e ORDER BY e.anio DESC`)).rows.map(r => ({ ...r, aprobada: r.aprobada == null ? null : Number(r.aprobada) }));
+}
+
+export async function listarDatosBase(db, actor) {
+  exigir(actor, M, 'ver');
+  return (await db.query('SELECT id, anio_base, descripcion, huella, cargado_en FROM datos_base ORDER BY id DESC')).rows.map(r => ({ ...r, id: Number(r.id) }));
+}
+
+const cacheBase = new Map();
+/** Lo que las pantallas necesitan de los datos base: nombres de unidades y líneas y el estado de resultados 2026E. */
+export async function contextoBase(db, actor, datosBaseId) {
+  exigir(actor, M, 'ver');
+  if (!cacheBase.has(datosBaseId)) {
+    const r = (await db.query('SELECT contenido FROM datos_base WHERE id = $1', [datosBaseId])).rows[0];
+    if (!r) falla(NO_ENCONTRADO, `No existen los datos base ${datosBaseId}`);
+    const datos = typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido;
+    const m = crearModelo(datos), g = m.pyg2026();
+    cacheBase.set(datosBaseId, { units: datos.units, names: datos.names, base2026: m.base2026, eerr2026: g.tot, eerr2026Unidades: g.units });
+  }
+  return cacheBase.get(datosBaseId);
+}
+
+/** Cambios de supuestos y pasos de aprobación de una versión, el más reciente primero. */
+export async function historialVersion(db, actor, versionId) {
+  exigir(actor, M, 'ver');
+  return (await db.query(`SELECT b.fecha, u.nombre, b.accion, b.antes, b.despues, b.detalle FROM bitacora b LEFT JOIN usuario u ON u.id = b.usuario_id
+    WHERE b.modulo = 'PRESUPUESTO' AND b.entidad = 'version' AND b.entidad_id = $1 ORDER BY b.id DESC LIMIT 200`, [String(versionId)])).rows;
+}

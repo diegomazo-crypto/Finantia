@@ -2,12 +2,36 @@
 
 Plataforma financiera de la Institución Universitaria CEIPA. Repositorio privado y confidencial.
 
-Contiene, por ahora sin pantallas:
+Contiene:
 
 1. El **motor de cálculo del módulo Presupuesto**: el mismo cálculo de Finantia Admon 1.0, verificado contra el Excel `CEIPA_Modelo_Presupuesto2027_v21_202611.xlsx` en los tres escenarios.
 2. La **base de datos** (PostgreSQL) y la lógica del servidor: el **módulo de Administración** (usuarios, accesos por módulo y rol, aprobaciones configurables, bitácora) y el **ciclo de una versión del presupuesto** (Borrador → En revisión → Aprobada → Reemplazada).
 
-Las pantallas vienen después, sobre esta base.
+3. El **servidor web y las pantallas** de Presupuesto y Administración, con ingreso por Microsoft 365.
+
+## Probarlo en un computador
+
+```bash
+npm install
+npm run demo        # http://localhost:3000
+```
+
+Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo, uno por rol, y la versión 1 del presupuesto 2027. En modo de desarrollo no se usa Microsoft 365: la pantalla de ingreso deja elegir el usuario.
+
+## Pantallas
+
+| Sección | Qué muestra |
+|---|---|
+| Presupuesto › Ejercicios | Ejercicios abiertos, sus versiones y su estado; crear una versión desde cero o como copia de otra |
+| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro |
+| Versión › Por unidad | Estado de resultados de las siete unidades, EBITDA por unidad e ingreso neto frente a 2026E |
+| Versión › Mensual y caja | Resultado mes a mes y flujo de caja con el saldo mínimo |
+| Versión › Proyección y NPV | 2026E–2031, FCF, NPV al 12%, TIR y payback simple y descontado |
+| Versión › Supuestos | Supuestos por escenario y por unidad; editables solo en borrador y por el rol Administración |
+| Versión › Aprobación | Enviar, aprobar o devolver con observaciones, decisiones, líneas presupuestales aprobadas e historial |
+| Administración | Usuarios y su rol en cada módulo, número y orden de aprobaciones, bitácora con filtros |
+
+Las pantallas usan la misma paleta y tipografía de Finantia 1.0, funcionan en teléfono y tienen modo oscuro. Faltan, para una siguiente etapa, las pestañas de 1.0 de ingresos, costo de prestación, sensibilidad, evaluación del equipo, archivos y preguntas.
 
 ## Qué calcula
 
@@ -54,6 +78,8 @@ m.caja.saldoFinal;      // saldo de caja a diciembre 2027
 | `servidor/admin/admin.js` | Módulo de Administración (solo Superusuario) |
 | `servidor/admin/identidad.js` | Ingreso con Microsoft 365: solo entra quien esté registrado |
 | `servidor/presupuesto/servicio.js` | Ejercicios, versiones, supuestos, aprobación y líneas presupuestales |
+| `servidor/web/` | Servidor HTTP (sin framework), API, ingreso con Microsoft 365 y datos de la demo |
+| `web/` | Pantallas: `index.html`, `app.js`, `estilos.css` |
 
 ### Reglas de permisos
 
@@ -87,6 +113,14 @@ DATABASE_URL=postgres://usuario:clave@servidor/finantia FINANTIA_DOMINIOS=ceipa.
 
 Aplica las migraciones, crea el primer Superusuario, carga la base 2026E y abre el ejercicio 2027. El correo del Superusuario se pasa al ejecutar y no queda en el repositorio.
 
+Luego, para arrancar:
+
+```bash
+DATABASE_URL=... ENTRA_TENANT_ID=<id del inquilino de CEIPA> ENTRA_CLIENT_ID=<id de la aplicación> PORT=3000 npm run iniciar
+```
+
+La aplicación se registra en Microsoft Entra ID como aplicación de una sola página (SPA) con la dirección del servidor como URI de redirección. El navegador inicia sesión con MSAL y envía el token de identidad; el servidor verifica la firma, el emisor y la audiencia con las llaves públicas de Microsoft. Toda llamada a la API exige además la cabecera `X-Finantia`, que un sitio ajeno no puede enviar. `FINANTIA_MODO_DESARROLLO=1` se niega a arrancar con `NODE_ENV=production`.
+
 ## Cifras de referencia (millones de COP)
 
 | Escenario | Ingreso neto 2027 | EBITDA 2027 | Resultado 2027 | NPV 2027–2031 | NPV con valor terminal |
@@ -99,6 +133,7 @@ Aplica las migraciones, crea el primer Superusuario, carga la base 2026E y abre 
 
 - `pruebas/cuadre_excel.test.js`: compara 2.727 cifras con el Excel v21 recalculado en cada escenario (presupuesto por rubro, estado de resultados por unidad, proyección y FCF 2026E–2031, métricas, mensual, flujo de caja y sensibilidad). Tolerancia ±1 millón por cifra; la diferencia máxima observada es menor a 1 peso.
 - `pruebas/servidor.test.js`: permisos, ingreso, Administración, ciclo completo de una versión con una y dos aprobaciones, y bitácora. Corre sobre PGlite (PostgreSQL en memoria); en GitHub también corre contra PostgreSQL 16.
+- `pruebas/api.test.js`: el servidor por HTTP: cabeceras de seguridad, archivos fuera de `web/`, sesión, permisos de cada rol, ciclo completo de una versión, Administración e ingreso con Microsoft 365 (con un verificador de prueba).
 - `pruebas/equivalencia_simulador.test.js`: 25 combinaciones aleatorias de supuestos contra el motor original de Finantia Admon 1.0, más el tornado, el punto de equilibrio y la programación optimizada tal como los muestran sus pantallas.
 
 Las referencias se regeneran con:

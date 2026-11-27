@@ -154,3 +154,16 @@ export async function consultarBitacora(db, actor, { modulo = null, usuarioId = 
         AND ($3::timestamptz IS NULL OR b.fecha >= $3) AND ($4::timestamptz IS NULL OR b.fecha < $4)
       ORDER BY b.id DESC LIMIT $5`, [modulo, usuarioId, desde, hasta, Math.min(Number(limite) || 200, 1000)])).rows;
 }
+
+export async function listarModulos(db, actor) {
+  exigir(actor, M, 'ver');
+  return (await db.query('SELECT codigo, nombre, activo FROM modulo ORDER BY orden')).rows;
+}
+
+export async function obtenerConfigAprobacion(db, actor, modulo) {
+  exigir(actor, M, 'ver');
+  const c = (await db.query('SELECT modulo, aprobaciones_requeridas, en_orden, actualizado_en FROM config_aprobacion WHERE modulo = $1', [modulo])).rows[0];
+  if (!c) falla(NO_ENCONTRADO, `El módulo ${modulo} no tiene aprobaciones`);
+  c.aprobadores = (await db.query('SELECT usuario_id FROM aprobador_orden WHERE modulo = $1 ORDER BY posicion', [modulo])).rows.map(r => Number(r.usuario_id));
+  return c;
+}

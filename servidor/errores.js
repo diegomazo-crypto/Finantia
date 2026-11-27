@@ -8,3 +8,4 @@ export const ESTADO_INVALIDO = 'ESTADO_INVALIDO';
 export const DATOS_INVALIDOS = 'DATOS_INVALIDOS';
 
 export const falla = (codigo, mensaje) => { throw new ErrorFinantia(codigo, mensaje); };
+export const SIN_SESION = 'SIN_SESION';
