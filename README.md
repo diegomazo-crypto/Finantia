@@ -34,6 +34,7 @@ o, sin contenedor, `FINANTIA_MODO_PRUEBAS=1 FINANTIA_CLAVE_PRUEBAS=... npm run i
 - La base es PostgreSQL si hay `DATABASE_URL`; si no, PGlite guardada en `FINANTIA_DIR_DATOS` (en el contenedor, el volumen `/datos`). Los cambios se conservan entre reinicios. La primera vez se siembran los usuarios de ejemplo y la versión 1 del presupuesto 2027.
 - No lleva datos por persona: la nómina por cargo queda desactivada (sin `FINANTIA_LLAVE_NOMINA`), y el auxiliar contable por centro de costos y cuenta y la evaluación del equipo no se cargan salvo con `FINANTIA_PRUEBAS_DETALLE=1`.
 - Use siempre HTTPS (lo da el servicio de alojamiento): con HTTP la clave viaja sin cifrar.
+- En Render: `render.yaml` describe el servicio (contenedor, disco de 1 GB en `/datos`, clave generada por Render). En Render: New › Blueprint › este repositorio. La clave queda en Environment del servicio.
 - Para producción se quita `FINANTIA_MODO_PRUEBAS` y se configuran `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`.
 
 ### Demostración sin servidor

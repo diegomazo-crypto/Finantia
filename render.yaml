@@ -1,0 +1,17 @@
+# Sitio de pruebas de Finantia 2.0 en Render (Blueprint). Ver README › Servidor de pruebas en internet.
+services:
+  - type: web
+    name: finantia-pruebas
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    region: virginia
+    branch: claude/project-thread-gz3hbg
+    autoDeploy: true
+    disk:
+      name: datos
+      mountPath: /datos
+      sizeGB: 1
+    envVars:
+      - key: FINANTIA_CLAVE_PRUEBAS
+        generateValue: true

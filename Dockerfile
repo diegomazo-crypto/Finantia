@@ -10,8 +10,7 @@ COPY servidor ./servidor
 COPY web ./web
 COPY datos ./datos
 ENV NODE_ENV=production FINANTIA_MODO_PRUEBAS=1 FINANTIA_DIR_DATOS=/datos PORT=3000
-RUN mkdir -p /datos && chown node:node /datos
+RUN mkdir -p /datos
 VOLUME /datos
 EXPOSE 3000
-USER node
 CMD ["node", "servidor/web/iniciar.js"]
