@@ -147,6 +147,19 @@ export async function vCosto(c, v, escenario, ctx) {
   const o = optimizarProgramacion(modelo.run, p);
   const tope = TOPE(p);
   const aplicada = Object.values(p.grp || {}).some(x => x);
+  /* Palancas por separado: cada una se aplica o se quita sola; el impacto es el de esa palanca con las demás como están. */
+  const COM = ['pres_c', 'virt_c', 'baq_c'], ESP = ['pres_e', 'virt_e', 'baq_e'];
+  const g = p.grp || {}, estado = { vert: !!p.vert, com: COM.some(k => g[k]), esp: ESP.some(k => g[k]) };
+  const params = st => ({ vert: st.vert ? 1 : 0, grp: Object.fromEntries([...COM.map(k => [k, st.com ? o.grp[k] : 0]), ...ESP.map(k => [k, st.esp ? o.grp[k] : 0])]) });
+  const calc = st => { const r = modelo.run({ ...p, ...params(st) }); return { cat: r.units[0].C + r.units[6].C, RN: r.tot.RN }; };
+  const ninguna = calc({ vert: false, com: false, esp: false }), hoy = calc(estado);
+  const PALANCAS = [['vert', '1. Vértice', 'Comunes de Sabaneta con profesores de planta y núcleos fusionados con mentores'],
+    ['com', '2. Comunes al tope', `Cursos comunes con el tope por grupo (${tope.pres} / ${tope.virt} / ${tope.baq})`],
+    ['esp', '3. Específicos al mínimo', `Cursos específicos con al menos ${OPT0.pres_e} / ${OPT0.virt_e} / ${OPT0.baq_e} estudiantes (por validar con la Vicerrectoría Académica)`]];
+  const filasPalanca = PALANCAS.map(([k, t, d]) => {
+    const sola = calc({ vert: false, com: false, esp: false, [k]: true }), con = calc({ ...estado, [k]: true }), sin = calc({ ...estado, [k]: false });
+    return { k, t, d, activa: estado[k], sola: ninguna.cat - sola.cat, catMarg: sin.cat - con.cat, rnMarg: con.RN - sin.RN };
+  });
 
   c.innerHTML = `${avisoCuadre(cuadra)}
     <div class="tarjeta"><h2>Costo de prestación por unidad · ${escenario}</h2>
@@ -182,6 +195,16 @@ export async function vCosto(c, v, escenario, ctx) {
         <div class="kpi"><small>Con las tres palancas</small><b>${M(o.catedra[3])}</b></div>
         <div class="kpi"><small>Ahorro total</small><b class="pos">${M(o.ahorro.total)}</b><small>Vértice ${M(o.ahorro.vertice)} · comunes ${M(o.ahorro.comunes)} · específicos ${M(o.ahorro.especificos)}</small></div>
       </div>
+      <h3>Cada palanca por separado</h3>
+      <p class="nota">«Sola» es el ahorro de cátedra si se aplicara únicamente esa palanca, sin ninguna otra. «Con las demás como están» es lo que la palanca suma hoy al escenario: ahorro de cátedra y efecto sobre el resultado neto. Las palancas se traslapan (por ejemplo, Vértice cambia los grupos comunes de Sabaneta), por eso las cifras «solas» no se suman.</p>
+      <div class="tabla-cont"><table id="t-palancas"><thead><tr><th>Palanca</th><th>Estado</th><th>Ahorro de cátedra sola</th><th>Ahorro de cátedra con las demás como están</th><th>Efecto en el resultado neto</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>
+      ${filasPalanca.map(x => `<tr><td class="izq"><b>${x.t}</b><br><span class="nota">${esc(x.d)}</span></td><td>${x.activa ? '<span class="estado APROBADA">Aplicada</span>' : '<span class="estado BORRADOR">Sin aplicar</span>'}</td>
+        <td class="${cls(x.sola)}">${M(x.sola)}</td><td class="${cls(x.catMarg)}">${M(x.catMarg)}</td><td class="${cls(x.rnMarg)}">${M(x.rnMarg)}</td>
+        ${ed ? `<td><button type="button" class="btn ${x.activa ? '' : 'primario'}" data-palanca="${x.k}">${x.activa ? 'Quitar' : 'Aplicar'}</button></td>` : ''}</tr>`).join('')}
+      <tr class="total"><td>Programación de hoy en el escenario</td><td></td><td></td><td>${M(ninguna.cat - hoy.cat)}</td><td class="${cls(hoy.RN - ninguna.RN)}">${M(hoy.RN - ninguna.RN)}</td>${ed ? '<td></td>' : ''}</tr>
+      </tbody></table></div>
+      <p class="nota">La fila final compara la programación de hoy con la de ninguna palanca. Cátedra de hoy: ${M(hoy.cat)}.</p>
+      <h3>Tamaño de grupo con las tres palancas</h3>
       <div class="tabla-cont"><table><thead><tr><th>Sede y tipo de curso</th><th>Estudiantes</th><th>Grupos hoy</th><th>Tamaño hoy</th><th>Tamaño optimizado</th><th>Grupos optimizados</th></tr></thead><tbody>
       ${o.segmentos.map(s => `<tr><td>${SEG[s.k]}</td><td>${nf0.format(s.estudiantes)}</td><td>${nf0.format(s.gruposHoy)}</td><td>${nf1.format(s.tamanoHoy)}</td><td>${nf1.format(s.tamanoOpt)}</td><td>${nf0.format(s.gruposOpt)}</td></tr>`).join('')}
       <tr class="total"><td>Total</td><td>${nf0.format(o.segmentos.reduce((a, s) => a + s.estudiantes, 0))}</td><td>${nf0.format(o.segmentos.reduce((a, s) => a + s.gruposHoy, 0))}</td><td></td><td></td><td>${nf0.format(o.segmentos.reduce((a, s) => a + s.gruposOpt, 0))}</td></tr>
@@ -193,6 +216,10 @@ export async function vCosto(c, v, escenario, ctx) {
     for (const k of ['pres', 'virt', 'baq']) { const x = Number(f.get(k)); if (!Number.isInteger(x) || x < 5 || x > 200) return accion(() => Promise.reject(new Error('Los topes van de 5 a 200 estudiantes'))); t[k] = x; }
     guardar(v, { params: Object.fromEntries(ESCS.map(x => [x, { tope: t }])) }, 'Topes guardados y versión recalculada', ctx);
   };
+  c.querySelectorAll('[data-palanca]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.palanca, st = { ...estado, [k]: !estado[k] }, t = PALANCAS.find(x => x[0] === k)[1];
+    guardar(v, { params: { [escenario]: params(st) } }, `${t}: ${st[k] ? 'aplicada' : 'quitada'} en el escenario ${escenario}`, ctx);
+  }));
   $('#aplicar-opt')?.addEventListener('click', () => guardar(v, { params: { [escenario]: { vert: 1, grp: o.grp } } }, `Programación optimizada aplicada al escenario ${escenario}`, ctx));
   $('#quitar-opt')?.addEventListener('click', () => guardar(v, { params: { [escenario]: { grp: Object.fromEntries(Object.keys(SEG).map(k => [k, 0])) } } }, 'Se volvió a la programación actual', ctx));
 }
