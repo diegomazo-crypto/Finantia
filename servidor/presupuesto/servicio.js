@@ -121,9 +121,22 @@ function resumenEscenario(x) {
   };
 }
 
+/**
+ * Datos base cargados antes de que existiera el reparto de nómina por unidad (REP, Nomina_Asignacion):
+ * se completa con el de datos/base2026.json de la instalación si la estructura de líneas coincide.
+ */
+async function completarDatos(datos) {
+  if (datos.REP) return datos;
+  try {
+    const f = JSON.parse((await import('node:fs')).readFileSync(new URL('../../datos/base2026.json', import.meta.url)));
+    if (f.REP && f.LP?.length === datos.LP?.length) return { ...datos, REP: f.REP };
+  } catch { /* sin archivo: se deja como está */ }
+  return datos;
+}
+
 async function modeloDe(t, version) {
   const base = (await t.query('SELECT contenido FROM datos_base WHERE id = $1', [version.datos_base_id])).rows[0];
-  const datos = typeof base.contenido === 'string' ? JSON.parse(base.contenido) : base.contenido;
+  const datos = await completarDatos(typeof base.contenido === 'string' ? JSON.parse(base.contenido) : base.contenido);
   return { datos, modelo: crearModelo(datos, version.supuestos || {}) };
 }
 
@@ -338,7 +351,7 @@ export async function contenidoDatosBase(db, actor, id) {
   exigir(actor, M, 'ver');
   const r = (await db.query('SELECT contenido FROM datos_base WHERE id = $1', [id])).rows[0];
   if (!r) falla(NO_ENCONTRADO, `No existen los datos base ${id}`);
-  return sinAuxiliar(typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido, actor);
+  return sinAuxiliar(await completarDatos(typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido), actor);
 }
 
 /** El reparto por centro de costos y cuenta (auxiliar contable) solo va a quien ve el detalle sensible. */
