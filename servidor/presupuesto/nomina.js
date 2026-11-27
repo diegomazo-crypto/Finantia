@@ -60,8 +60,9 @@ const normal = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toL
 /** Separa un CSV (coma, punto y coma o tabulador; comillas dobles). */
 export function leerCsv(texto) {
   const t = texto.replace(/^﻿/, '');
-  const primera = t.split(/\r?\n/, 1)[0];
-  const sep = [';', '\t', ','].map(s => [s, primera.split(s).length]).sort((a, b) => b[1] - a[1])[0][0];
+  /* El separador se toma de las primeras líneas (los balances traen títulos antes del encabezado) */
+  const inicio = t.split(/\r?\n/, 12);
+  const sep = [';', '\t', ','].map(s => [s, Math.max(...inicio.map(l => l.split(s).length))]).sort((a, b) => b[1] - a[1])[0][0];
   const filas = []; let fila = [], campo = '', comillas = false;
   for (let i = 0; i < t.length; i++) {
     const c = t[i];

@@ -3,6 +3,7 @@
 import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos, detalleLineas } from './analisis.js';
 import { vNomina, vEvaluacion } from './sensible.js';
 import { pantallaPlaneacion } from './planeacion.js';
+import { pantallaEjecucion } from './ejecucion.js';
 import { $, ACCIONES, EERR, ESCS, ESTADOS, M, MESES, Mn, P, ROLES, accion, almacen, anchos, api, app, aviso, cls, esc, fecha, ganchos, kpi, modulo, nf0, nf1, sesion } from './comun.js';
 
 async function iniciar() {
@@ -72,6 +73,7 @@ async function pantallaIngreso(error) {
 function pintarMenu(actual) {
   const items = [];
   if (modulo('PRESUPUESTO')) items.push(['presupuesto', 'Presupuesto']);
+  if (modulo('EJECUCION')) items.push(['ejecucion', 'Ejecución']);
   if (modulo('PLANEACION')) items.push(['planeacion', 'Planeación financiera']);
   if (sesion.perfil.admin.ver) items.push(['admin', 'Administración']);
   $('#menu').innerHTML = items.map(([k, t]) => `<a href="#/${k}" ${actual === k ? 'aria-current="page"' : ''}>${t}</a>`).join('');
@@ -84,6 +86,7 @@ async function enrutar() {
   try {
     if (!mod) {
       if (modulo('PRESUPUESTO')) return (location.hash = '#/presupuesto');
+      if (modulo('EJECUCION')) return (location.hash = '#/ejecucion');
       if (modulo('PLANEACION')) return (location.hash = '#/planeacion');
       if (sesion.perfil.admin.ver) return (location.hash = '#/admin');
       return sinModulos();
@@ -92,6 +95,7 @@ async function enrutar() {
       if (resto[0] === 'v') return await pantallaVersion(Number(resto[1]), resto[2] || 'resumen');
       return await pantallaEjercicios(resto[0] ? Number(resto[0]) : null);
     }
+    if (mod === 'ejecucion' && modulo('EJECUCION')) return await pantallaEjecucion(resto[0] ? Number(resto[0]) : null);
     if (mod === 'planeacion' && modulo('PLANEACION')) return await pantallaPlaneacion(resto[0] ? Number(resto[0]) : null, resto[1] ? Number(resto[1]) : null);
     if (mod === 'admin' && sesion.perfil.admin.ver) return await pantallaAdmin(resto[0] || 'usuarios');
     app.innerHTML = '<div class="tarjeta"><h2>No disponible</h2><p class="nota">No tiene acceso a esta sección.</p></div>';

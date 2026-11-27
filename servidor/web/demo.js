@@ -15,6 +15,7 @@ export async function sembrarDemo(db, { detalle = true } = {}) {
     const id = await A.crearUsuario(db, su, { correo, nombre }, []);
     await A.asignarAcceso(db, su, id, 'PRESUPUESTO', rol, { detalleSensible });
     await A.asignarAcceso(db, su, id, 'PLANEACION', rol);
+    await A.asignarAcceso(db, su, id, 'EJECUCION', rol, { detalleSensible });
     return id;
   };
   const adm = await cargarActor(db, await crea('administracion@demo.finantia', 'Equipo financiero (demo)', 'ADMINISTRACION', true));

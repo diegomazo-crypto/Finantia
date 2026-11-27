@@ -42,18 +42,18 @@ function directorio(b) {
   return archivos;
 }
 
-async function extraer(b, archivos, nombre, inflar) {
+async function extraer(b, archivos, nombre, inflar, max = MAX_DESCOMPRIMIDO) {
   const a = archivos.get(nombre);
   if (!a) return null;
-  if (a.largo > MAX_DESCOMPRIMIDO) malo('demasiado grande');
+  if (a.largo > max) malo('demasiado grande');
   const h = a.local;
   if (h + 30 > b.length || u32(b, h) !== 0x04034b50) malo('archivo interno dañado');
   const ini = h + 30 + u16(b, h + 26) + u16(b, h + 28), datos = b.subarray(ini, ini + a.comprimido);
   let out;
   if (a.metodo === 0) out = datos;
-  else if (a.metodo === 8) { try { out = await inflar(datos, MAX_DESCOMPRIMIDO); } catch { malo('compresión dañada'); } }
+  else if (a.metodo === 8) { try { out = await inflar(datos, max); } catch { malo('compresión dañada'); } }
   else malo('compresión no soportada');
-  if (out.length > MAX_DESCOMPRIMIDO) malo('demasiado grande');
+  if (out.length > max) malo('demasiado grande');
   return new TextDecoder().decode(out);
 }
 
@@ -74,10 +74,12 @@ function columna(ref) {
 /**
  * @param {Uint8Array} b         contenido del .xlsx
  * @param {(datos: Uint8Array, max: number) => Promise<Uint8Array>|Uint8Array} inflar
- * @param {{ hojas?: string[] }} [op]  hojas preferidas por nombre (sin tildes ni mayúsculas); si no está ninguna, la primera
+ * @param {{ hojas?: string[], elegir?: (nombre: string) => boolean, grande?: boolean }} [op]  hojas preferidas por nombre (sin tildes ni mayúsculas); si no está ninguna, la primera que cumpla `elegir`; si no, la primera.
+ *   `grande`: límites amplios (150 MB y 3 millones de celdas) para archivos contables como el balance de prueba por tercero
  * @returns {Promise<Array<Array<string|number>>>} filas de la hoja (sin filas vacías)
  */
-export async function leerXlsx(b, inflar, { hojas = [] } = {}) {
+export async function leerXlsx(b, inflar, { hojas = [], elegir = null, grande = false } = {}) {
+  const maxB = grande ? 150 * 1024 * 1024 : MAX_DESCOMPRIMIDO, maxC = grande ? 3000000 : MAX_CELDAS;
   if (!esZip(b)) malo('no es un .xlsx');
   const archivos = directorio(b);
   const libro = await extraer(b, archivos, 'xl/workbook.xml', inflar);
@@ -86,15 +88,15 @@ export async function leerXlsx(b, inflar, { hojas = [] } = {}) {
   if (!hojasLibro.length) malo('el libro no tiene hojas');
   const norm = x => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
   const pedida = hojas.map(norm);
-  const hoja1 = [hojasLibro.find(t => pedida.includes(norm(attr(t, 'name')))) || hojasLibro[0]];
+  const hoja1 = [hojasLibro.find(t => pedida.includes(norm(attr(t, 'name')))) || (elegir && hojasLibro.find(t => elegir(norm(attr(t, 'name'))))) || hojasLibro[0]];
   const rid = attr(hoja1[0], 'r:id');
   const rels = (await extraer(b, archivos, 'xl/_rels/workbook.xml.rels', inflar)) || '';
   const rel = [...rels.matchAll(/<Relationship\b[^>]*>/g)].map(m => m[0]).find(t => attr(t, 'Id') === rid);
   let ruta = rel ? attr(rel, 'Target') : 'worksheets/sheet1.xml';
   ruta = ruta.startsWith('/') ? ruta.slice(1) : 'xl/' + ruta.replace(/^\.\//, '');
-  const hoja = await extraer(b, archivos, ruta, inflar);
+  const hoja = await extraer(b, archivos, ruta, inflar, maxB);
   if (!hoja) malo('no se encontró la primera hoja');
-  const sst = await extraer(b, archivos, 'xl/sharedStrings.xml', inflar);
+  const sst = await extraer(b, archivos, 'xl/sharedStrings.xml', inflar, maxB);
   const compartidos = sst ? [...sst.matchAll(/<si>([\s\S]*?)<\/si>|<si\/>/g)].map(m => tes(m[1] || '')) : [];
 
   const filas = []; let celdas = 0;
@@ -102,7 +104,7 @@ export async function leerXlsx(b, inflar, { hojas = [] } = {}) {
     const fila = [];
     let siguiente = 0;
     for (const cm of (fm[1] || '').matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
-      if (++celdas > MAX_CELDAS) malo('demasiadas celdas');
+      if (++celdas > maxC) malo('demasiadas celdas');
       const tag = ' ' + cm[1], cuerpo = cm[2] || '';
       const i = columna(attr(tag, 'r')) ?? siguiente;
       if (i > 16383) malo('columna fuera de rango');

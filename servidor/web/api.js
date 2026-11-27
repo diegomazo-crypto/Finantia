@@ -5,11 +5,13 @@ import * as P from '../presupuesto/servicio.js';
 import * as AR from '../presupuesto/archivos.js';
 import * as EV from '../presupuesto/evaluacion.js';
 import * as PL from '../planeacion/servicio.js';
+import * as EJ from '../ejecucion/servicio.js';
 import { TAMANO_MAXIMO as NOMINA_MAX } from '../presupuesto/nomina.js';
 import { falla, DATOS_INVALIDOS } from '../errores.js';
 import { DEFAULTS, FIXED } from '../../motor/parametros.js';
 
 const ruta = (metodo, patron, fn, extra = {}) => ({ metodo, patron: new RegExp('^' + patron.replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$'), fn, ...extra });
+const nombreDe = headers => { try { return decodeURIComponent(headers['x-nombre'] || ''); } catch { falla(DATOS_INVALIDOS, 'Nombre de archivo inválido'); } };
 const entero = v => { const n = Number(v); if (!Number.isInteger(n)) falla(DATOS_INVALIDOS, `Número inválido: ${v}`); return n; };
 
 /** Lo que el navegador necesita saber del usuario para armar el menú. */
@@ -92,6 +94,18 @@ export function rutasApi(db, auth, asistente, nomina) {
     /* Evaluación del presupuesto del equipo (solo 2027; requiere el detalle sensible) */
     ruta('GET', '/api/presupuesto/ejercicios/:anio/evaluacion', async ({ actor, params }) => ({ evaluacion: await EV.obtenerEvaluacion(db, actor, entero(params.anio)) })),
     ruta('PUT', '/api/presupuesto/ejercicios/:anio/evaluacion', ({ actor, params, body }) => EV.cargarEvaluacion(db, actor, entero(params.anio), body)),
+
+    /* Ejecución presupuestal */
+    ruta('GET', '/api/ejecucion', ({ actor }) => EJ.anios(db, actor)),
+    ruta('GET', '/api/ejecucion/:anio', ({ actor, params }) => EJ.tablero(db, actor, entero(params.anio))),
+    ruta('GET', '/api/ejecucion/:anio/lineas/:li', ({ actor, params, query }) => EJ.detalleLinea(db, actor, entero(params.anio), {
+      linea: entero(params.li), hasta: query.hasta ? entero(query.hasta) : 12, unidad: query.unidad != null && query.unidad !== '' ? entero(query.unidad) : null
+    })),
+    ruta('GET', '/api/ejecucion/:anio/sin-clasificar', ({ actor, params, query }) => EJ.sinClasificar(db, actor, entero(params.anio), { hasta: query.hasta ? entero(query.hasta) : 12 })),
+    ruta('POST', '/api/ejecucion/:anio/base', ({ actor, params, body, headers }) => EJ.subirBase(db, actor, entero(params.anio), { nombre: nombreDe(headers), contenido: body }), { crudo: EJ.TAMANO_MAXIMO }),
+    ruta('DELETE', '/api/ejecucion/:anio/base', ({ actor, params }) => EJ.borrarBase(db, actor, entero(params.anio))),
+    ruta('POST', '/api/ejecucion/:anio/meses/:mes', ({ actor, params, body, headers }) => EJ.subirMes(db, actor, entero(params.anio), entero(params.mes), { nombre: nombreDe(headers), contenido: body }), { crudo: EJ.TAMANO_MAXIMO }),
+    ruta('DELETE', '/api/ejecucion/:anio/meses/:mes', ({ actor, params }) => EJ.borrarMes(db, actor, entero(params.anio), entero(params.mes))),
 
     /* Planeación financiera */
     ruta('GET', '/api/planeacion/flujo', ({ actor, query }) => PL.flujoDeCaja(db, actor, {

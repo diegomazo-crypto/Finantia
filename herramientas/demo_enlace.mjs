@@ -34,6 +34,7 @@ app = cambiar(app, "  if (recargar) location.replace('/#/');\n  location.reload(
 escribir('app.js', app);
 escribir('sensible.js', leer('web/sensible.js').replaceAll("from '/motor/", "from './motor/"));
 copiar('web/planeacion.js', 'planeacion.js');
+escribir('ejecucion.js', leer('web/ejecucion.js').replaceAll("from '/motor/", "from './motor/"));
 copiar('web/xlsx.js', 'xlsx.js');
 copiar('web/marca/finantia.png', 'marca/finantia.png');
 escribir('estilos.css', leer('web/estilos.css') + `

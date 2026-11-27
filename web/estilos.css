@@ -185,3 +185,37 @@ input.pl-pers{width:5.5em}
 #t-plan tr.persona td{font-size:.92em}
 label.casilla{display:inline-flex;align-items:center;gap:.4em;margin-right:1.2em}
 .btn.chico{padding:.15em .6em;font-size:.85em;margin-left:.6em}
+
+/* Ejecución presupuestal */
+.sem { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--line); vertical-align: 0; margin-right: 6px; flex: none }
+.sem.verde { background: var(--pos) } .sem.amarillo { background: var(--mark) } .sem.rojo { background: var(--neg) } .sem.azul { background: var(--accent) }
+.sem-t { font-size: 12px; color: var(--muted); margin-right: 10px }
+.kpi.sem-borde { border-left: 4px solid var(--line) }
+.kpi.sem-borde.verde { border-left-color: var(--pos) } .kpi.sem-borde.amarillo { border-left-color: var(--mark) } .kpi.sem-borde.rojo { border-left-color: var(--neg) } .kpi.sem-borde.azul { border-left-color: var(--accent) }
+.kpi.sem-borde small:last-child { margin-top: 4px }
+.rejilla.dos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)) }
+.filtros .formfila { margin-block: 0 }
+.leyenda-sem { margin-left: auto }
+ul.avisos { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; max-width: 110ch }
+ul.avisos li { margin: 4px 0 }
+ol.pasos li { margin: 6px 0; max-width: 95ch } ol.pasos li.hecho { color: var(--muted) } ol.pasos li.hecho::marker { content: '✓  ' }
+svg.barras-h { min-width: 420px }
+svg.grafico .et { fill: var(--ink); font-size: 12px } svg.grafico .v { fill: var(--muted); font-size: 11px }
+svg.grafico rect.b { fill: var(--line) } svg.grafico rect.b.verde { fill: var(--pos) } svg.grafico rect.b.amarillo { fill: var(--mark) } svg.grafico rect.b.rojo { fill: var(--neg) } svg.grafico rect.b.azul { fill: var(--accent) }
+svg.grafico rect.ppto { fill: var(--line) } svg.grafico rect.real { fill: var(--accent) } svg.grafico rect.real.neg { fill: var(--neg) }
+svg.grafico rect.estimado { fill: color-mix(in srgb, var(--accent) 40%, transparent) }
+svg.grafico .linea { stroke: var(--mark) } svg.grafico .punto { fill: var(--mark) }
+.leyenda b.ppto { background: var(--line) } .leyenda b.real { background: var(--accent) } .leyenda b.estimado { background: color-mix(in srgb, var(--accent) 40%, transparent) }
+.leyenda b.linea { background: var(--mark) }
+.meses-rej { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); margin: 8px 0 12px }
+.mes-c { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.mes-c small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere }
+.mes-c.cargado { border-style: solid; border-color: var(--pos); background: var(--pos-soft) }
+.mes-c.estimado { border-style: solid; background: var(--sunk) }
+.mes-c .btn.chico { margin: 4px 0 0; align-self: flex-start }
+ul.alertas li { flex-wrap: nowrap; align-items: baseline } ul.alertas .nombre { font-weight: 500 } ul.alertas .der { white-space: nowrap }
+table.interna { font-size: 12px; margin: 4px 0 }
+table.interna td, table.interna th { padding: 4px 8px }
+table.interna td:first-child, table.interna th:first-child { position: static; background: none }
+tr.det-cc > td { background: var(--bg) !important; white-space: normal }
+.alerta-est { background: color-mix(in srgb, var(--mark) 16%, transparent); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 0 0 10px; max-width: 110ch }
