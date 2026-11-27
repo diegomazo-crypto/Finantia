@@ -60,14 +60,14 @@ export async function vNomina(c, v, escenario, ctx = {}) {
       ${porRubro.filter(r => r.costo || nomModelo(r.k)).map(r => { const m = nomModelo(r.k); return `<tr><td>${esc(r.t)}</td><td>${n1(r.personas)}</td><td>${Mn(r.costo)}</td><td>${Mn(m)}</td><td class="${clsM(r.costo - m)}">${Mn(r.costo - m)}</td></tr>`; }).join('')}
       <tr class="total"><td>Total</td><td>${n1(tot.personas)}</td><td>${Mn(tot.costo)}</td><td>${Mn(totModelo)}</td><td class="${clsM(tot.costo - totModelo)}">${Mn(tot.costo - totModelo)}</td></tr>
       </tbody></table></div></div>
-    <div class="tarjeta"><h3>Detalle por rubro, proceso y cargo</h3>
+    ${d.personas ? '' : `<div class="tarjeta"><h3>Detalle por rubro, proceso y cargo</h3>
       <p class="nota">Pesos. Toque un proceso para ver sus cargos.</p>
       <div class="tabla-cont"><table id="t-nomina"><thead><tr><th>Rubro · proceso · cargo</th><th>Continúan</th><th>Nuevos</th><th>Vacantes</th><th>Salario mensual ${anio} (suma del cargo)</th><th>Costo anual</th></tr></thead><tbody>
       ${porRubro.filter(r => r.procesos.length).map(r => `<tr class="sub"><td>${esc(r.t)}</td><td>${n1(r.continuan)}</td><td>${n1(r.nuevos)}</td><td>${n1(r.vacantes)}</td><td></td><td>${nf0.format(r.costo)}</td></tr>
         ${r.procesos.map((p, j) => { const id = `${r.k}-${j}`; return `<tr class="det"><td><button type="button" class="enlace" data-abrir="${id}" aria-expanded="false">▸ ${esc(p.proceso)}</button></td><td>${n1(p.continuan)}</td><td>${n1(p.nuevos)}</td><td>${n1(p.vacantes)}</td><td></td><td>${nf0.format(p.costo)}</td></tr>
           ${p.cargos.map(x => `<tr class="cargo" data-de="${id}" hidden><td>${esc(x.cargo)}${x.nombre || x.cedula ? `<br><small class="nota">${esc([x.nombre, x.cedula && 'C.C. ' + x.cedula].filter(Boolean).join(' · '))}</small>` : ''}</td><td>${n1(x.continuan)}</td><td>${n1(x.nuevos)}</td><td>${n1(x.vacantes)}</td><td>${nf0.format(x.salario2027)}</td><td>${nf0.format(x.costoAnual)}</td></tr>`).join('')}`; }).join('')}`).join('')}
       <tr class="total"><td>Total</td><td>${n1(tot.continuan)}</td><td>${n1(tot.nuevos)}</td><td>${n1(tot.vacantes)}</td><td></td><td>${nf0.format(tot.costo)}</td></tr>
-      </tbody></table></div></div>` : ''}`;
+      </tbody></table></div></div>`}` : ''}`;
   if (d.personas) await planPersonas($('#plan-personas'), d, v, mod, ctx);
   $('#t-nomina')?.addEventListener('click', e => {
     const b = e.target.closest('[data-abrir]'); if (!b) return;
@@ -155,29 +155,57 @@ export { NOMBRE_RUBRO };
 async function planPersonas(c, d, v, mod, ctx) {
   const datos = await api('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`);
   const actual = v.supuestos?.nominaPlan || null;
-  const st = { modo: actual?.modo || 'plan', personas: { ...(actual?.personas || {}) } };
+  const st = { modo: actual?.modo || 'plan', personas: { ...(actual?.personas || {}) }, abiertos: new Set() };
   const sm27 = smmlv2027(v.supuestos?.params?.Moderado?.sm ?? DEFAULTS.Moderado.sm);
   const editable = mod.editar && v.estado === 'BORRADOR';
+  /* Casillas de la 1.0: incluir vacantes / incluir cargos nuevos → modo del motor */
+  const MODO = { '01': 'plan', '00': 'cont', '10': 'vac', '11': 'ambos' };
   const calc = () => planNomina(d.personas, { REP: datos.REP, nLineas: datos.LP.length, sm27, modo: st.modo, personasPorProceso: st.personas });
+  const abrir = (id, n) => n ? `<button type="button" class="enlace" data-abrir="${id}" aria-expanded="${st.abiertos.has(id)}">${st.abiertos.has(id) ? '▾' : '▸'} ` : '';
   const pintar = () => {
-    const r = calc();
+    const r = calc(), incluye = { vac: st.modo === 'vac' || st.modo === 'ambos', nue: st.modo === 'plan' || st.modo === 'ambos' };
     const cnt = k => r.personas.filter(p => p.clase === k).length;
     const porRubro = RUBROS_NOMINA.map(([k, t]) => ({ k, t, ps: r.procesos.filter(g => g.rubro === k) })).filter(x => x.ps.length);
     const sumR = (ps, f) => ps.reduce((a, g) => a + g[f], 0);
+    const w = p => p.clase === 'Vacante' || p.clase === 'Bolsa' ? 1 : (p.peso ?? 1);
+    const enClase = (ps, k) => ps.filter(p => p.clase === k).reduce((a, p) => a + w(p), 0);
+    const filasProceso = (g, rk, j) => {
+      const id = `p-${rk}-${j}`, visible = st.abiertos.has(id);
+      const ps = r.personas.filter(p => p.proceso === g.proceso);
+      const cargos = [...new Set(ps.map(p => p.cargo))].sort((a, b) => a.localeCompare(b, 'es')).map(cg => ({ cargo: cg, ps: ps.filter(p => p.cargo === cg) }));
+      return `<tr class="det"><td>${abrir(id, ps.length)}${esc(g.proceso)}${ps.length ? '</button>' : ''}</td><td>${n1(g.cont)}</td><td>${n1(g.nuevos)}</td><td>${n1(g.vac)}</td><td>${n1(g.bolsas)}</td>
+          <td>${editable ? `<input type="number" min="0" step="0.5" class="pl-pers" data-proc="${esc(g.proceso)}" value="${g.personas}" aria-label="Total personas de ${esc(g.proceso)}">` : n1(g.personas)}</td>
+          <td>${g.factor.toFixed(3)}</td><td>${Mn(g.costoPlan)}</td><td class="${Math.abs(g.costo - g.costoPlan) > 5e5 ? 'chg' : ''}">${Mn(g.costo)}</td></tr>
+        ${cargos.map((x, k) => { const idc = `${id}-${k}`, vc = visible && st.abiertos.has(idc);
+          return `<tr class="cargo" data-de="${id}" ${visible ? '' : 'hidden'}><td class="n2">${abrir(idc, x.ps.length)}${esc(x.cargo)}</button></td><td>${n1(enClase(x.ps, 'Continúa'))}</td><td>${n1(enClase(x.ps, 'Nuevo'))}</td><td>${n1(enClase(x.ps, 'Vacante'))}</td><td>${n1(enClase(x.ps, 'Bolsa'))}</td><td></td><td></td>
+            <td>${Mn(x.ps.reduce((a, p) => a + p.costo, 0))}</td><td>${Mn(x.ps.reduce((a, p) => a + p.costoAjustado, 0))}</td></tr>
+          ${x.ps.map(p => `<tr class="persona" data-de="${idc}" data-pp="${id}" ${vc ? '' : 'hidden'}><td class="n3">${esc(p.nombre || p.clase)}${p.cedula ? ` <small class="nota">C.C. ${esc(p.cedula)}</small>` : ''}<br><small class="nota">${esc(p.clase)}${p.s26 ? ` · salario 2026 ${nf0.format(p.s26)}` : ''}${p.s27 ? ` · 2027 ${nf0.format(p.s27)}` : ''}${p.factor ? ` · factor ${p.factor.toFixed(4)}` : ''}${(p.peso ?? 1) !== 1 && p.s27 ? ` · pesa ${n1(p.peso)}` : ''}${p.unidad ? ` · ${esc(p.unidad)}` : ''}</small></td>
+              <td>${p.clase === 'Continúa' ? n1(w(p)) : ''}</td><td>${p.clase === 'Nuevo' ? n1(w(p)) : ''}</td><td>${p.clase === 'Vacante' ? 1 : ''}</td><td>${p.clase === 'Bolsa' ? 1 : ''}</td><td></td><td></td>
+              <td>${Mn(p.costo)}</td><td>${Mn(p.costoAjustado)}</td></tr>`).join('')}`; }).join('')}`;
+    };
     const enVersion = actual ? `Esta versión usa el plan por persona: ${esc((MODOS.find(m => m[0] === actual.modo) || ['', actual.modo])[1].toLowerCase())}, ${Mn(actual.total)} M.` : 'Esta versión usa todavía la nómina de los datos base (plan del Excel v21).';
     c.innerHTML = `<h3>Plan de nómina por persona</h3>
       <p class="nota">Como en la hoja Nomina2027 del Excel v21: ${cnt('Continúa')} personas continúan, ${cnt('Nuevo')} cargos nuevos (sin salario 2026), ${cnt('Vacante')} vacantes (sin salario 2027) y ${cnt('Bolsa')} bolsas (costo sin salario). Costo anual con el incremento desde abril, el piso del mínimo y del salario integral desde enero (SMMLV 2027 ${nf0.format(Math.round(sm27))}) y el factor prestacional. ${enVersion}</p>
-      <div class="formfila"><label class="campo">Cargos a costear<select id="pl-modo" ${editable ? '' : 'disabled'}>${MODOS.map(([k, l]) => `<option value="${k}" ${k === st.modo ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      <div class="formfila">
+        <label class="casilla"><input type="checkbox" id="pl-vac" ${incluye.vac ? 'checked' : ''}> Incluir las vacantes en el cálculo</label>
+        <label class="casilla"><input type="checkbox" id="pl-nue" ${incluye.nue ? 'checked' : ''}> Incluir los cargos nuevos en el cálculo</label>
         ${editable ? `<button class="btn primario" type="button" id="pl-aplicar">Aplicar a la versión</button>${actual ? ' <button class="btn" type="button" id="pl-quitar">Volver a la nómina de los datos base</button>' : ''}` : ''}</div>
-      <p class="nota">Costo del plan: ${Mn(r.totalPlan)} M · con los cargos a costear y las personas de cada proceso: <b>${Mn(r.total)} M</b> (${r.total >= r.totalPlan ? '+' : ''}${Mn(r.total - r.totalPlan)} M). Las vacantes se costean al costo promedio por persona de su proceso. Cambie el total de personas de un proceso para costear más o menos personas.</p>
-      <div class="tabla-cont"><table id="t-plan"><thead><tr><th>Rubro · proceso</th><th>Continúan</th><th>Nuevos</th><th>Vacantes</th><th>Bolsas</th><th>Total personas</th><th>Factor</th><th>Costo plan</th><th>Costo ajustado</th></tr></thead><tbody>
+      ${editable ? '' : `<p class="nota">Puede simular con las casillas; ${mod.editar ? 'para guardar el cálculo en la versión, ábrala en borrador (esta está en ' + esc(String(v.estado).toLowerCase().replace('_', ' ')) + ')' : 'guardarlo en la versión requiere permiso de edición'}.</p>`}
+      <p class="nota">Costo del plan: ${Mn(r.totalPlan)} M · ${esc((MODOS.find(m => m[0] === st.modo) || ['', ''])[1].toLowerCase())} y las personas de cada proceso: <b>${Mn(r.total)} M</b> (${r.total >= r.totalPlan ? '+' : ''}${Mn(r.total - r.totalPlan)} M). Una vacante incluida cuesta el promedio por persona de su proceso; un cargo nuevo excluido no se costea. Cambie el total de personas de un proceso para costear más o menos personas. Toque un proceso para ver sus cargos y un cargo para ver sus personas.</p>
+      <div class="tabla-cont"><table id="t-plan"><thead><tr><th>Rubro · proceso · cargo · persona</th><th>Continúan</th><th>Nuevos</th><th>Vacantes</th><th>Bolsas</th><th>Total personas</th><th>Factor</th><th>Costo plan</th><th>Costo ajustado</th></tr></thead><tbody>
       ${porRubro.map(x => `<tr class="sub"><td>${esc(x.t)}</td><td>${n1(sumR(x.ps, 'cont'))}</td><td>${n1(sumR(x.ps, 'nuevos'))}</td><td>${n1(sumR(x.ps, 'vac'))}</td><td>${n1(sumR(x.ps, 'bolsas'))}</td><td>${n1(sumR(x.ps, 'personas'))}</td><td></td><td>${Mn(sumR(x.ps, 'costoPlan'))}</td><td>${Mn(sumR(x.ps, 'costo'))}</td></tr>
-        ${x.ps.map(g => `<tr class="det"><td>${esc(g.proceso)}</td><td>${n1(g.cont)}</td><td>${n1(g.nuevos)}</td><td>${n1(g.vac)}</td><td>${n1(g.bolsas)}</td>
-          <td>${editable ? `<input type="number" min="0" step="0.5" class="pl-pers" data-proc="${esc(g.proceso)}" value="${g.personas}" aria-label="Total personas de ${esc(g.proceso)}">` : n1(g.personas)}</td>
-          <td>${g.factor.toFixed(3)}</td><td>${Mn(g.costoPlan)}</td><td class="${Math.abs(g.costo - g.costoPlan) > 5e5 ? 'chg' : ''}">${Mn(g.costo)}</td></tr>`).join('')}`).join('')}
+        ${x.ps.map((g, j) => filasProceso(g, x.k, j)).join('')}`).join('')}
       <tr class="total"><td>Total</td><td>${n1(sumR(r.procesos, 'cont'))}</td><td>${n1(sumR(r.procesos, 'nuevos'))}</td><td>${n1(sumR(r.procesos, 'vac'))}</td><td>${n1(sumR(r.procesos, 'bolsas'))}</td><td>${n1(sumR(r.procesos, 'personas'))}</td><td></td><td>${Mn(r.totalPlan)}</td><td>${Mn(r.total)}</td></tr>
       </tbody></table></div>`;
-    $('#pl-modo')?.addEventListener('change', e => { st.modo = e.target.value; pintar(); });
+    const modo = () => { st.modo = MODO[`${+$('#pl-vac').checked}${+$('#pl-nue').checked}`]; pintar(); };
+    $('#pl-vac')?.addEventListener('change', modo);
+    $('#pl-nue')?.addEventListener('change', modo);
+    $('#t-plan')?.addEventListener('click', e => {
+      const b = e.target.closest('[data-abrir]'); if (!b) return;
+      const id = b.dataset.abrir;
+      if (st.abiertos.has(id)) { st.abiertos.delete(id); [...st.abiertos].filter(x => x.startsWith(id + '-')).forEach(x => st.abiertos.delete(x)); } else st.abiertos.add(id);
+      pintar();
+    });
     c.querySelectorAll('.pl-pers').forEach(i => i.addEventListener('change', () => {
       const g = calc().procesos.find(x => x.proceso === i.dataset.proc), n = Number(i.value);
       if (!Number.isFinite(n) || n < 0) return;

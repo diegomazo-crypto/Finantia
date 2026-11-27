@@ -179,3 +179,8 @@ svg.grafico .ref { stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 5 4
 tr.memo td { color: var(--muted); font-style: italic }
 td.chg{font-weight:600}
 input.pl-pers{width:5.5em}
+
+#t-plan td.n2{padding-left:2.2em}
+#t-plan td.n3{padding-left:3.6em;font-weight:400}
+#t-plan tr.persona td{font-size:.92em}
+label.casilla{display:inline-flex;align-items:center;gap:.4em;margin-right:1.2em}
