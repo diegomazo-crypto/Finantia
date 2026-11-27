@@ -15,3 +15,6 @@ services:
     envVars:
       - key: FINANTIA_CLAVE_PRUEBAS
         generateValue: true
+      # Activa la carga de la nómina por cargo (cifrada). Quitarla la apaga y deja ilegibles las cargas.
+      - key: FINANTIA_LLAVE_NOMINA
+        generateValue: true

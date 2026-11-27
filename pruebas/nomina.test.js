@@ -10,6 +10,10 @@ import { desdePGlite, migrar } from '../servidor/db/conexion.js';
 import { crearServidor } from '../servidor/web/servidor.js';
 import { sembrarDemo } from '../servidor/web/demo.js';
 import { crearNomina, interpretarNomina, numero, leerCsv } from '../servidor/presupuesto/nomina.js';
+import { readFileSync } from 'node:fs';
+import { inflateRawSync } from 'node:zlib';
+import { leerXlsx } from '../servidor/presupuesto/xlsx.js';
+import { libroXlsx } from '../web/xlsx.js';
 import { validarEvaluacion } from '../servidor/presupuesto/evaluacion.js';
 
 const U = { su: 'superusuario@demo.finantia', adm: 'administracion@demo.finantia', apr: 'aprobacion@demo.finantia', con: 'consulta@demo.finantia' };
@@ -32,7 +36,10 @@ async function pedir(b, metodo, ruta, { como, cuerpo, crudo, nombre } = {}) {
   return { status: r.status, datos: await r.json().catch(() => null) };
 }
 const ok = async (p, status = 200) => { const r = await p; assert.equal(r.status, status, JSON.stringify(r.datos)); return r.datos; };
-const subir = (como, texto, nombre = 'nomina.csv', b = base) => pedir(b, 'POST', '/api/presupuesto/ejercicios/2027/nomina', { como, crudo: Buffer.from(texto, 'utf8'), nombre });
+const subir = (como, texto, nombre = 'nomina.csv', b = base) => pedir(b, 'POST', '/api/presupuesto/ejercicios/2027/nomina', { como, crudo: Buffer.isBuffer(texto) ? texto : Buffer.from(texto, 'utf8'), nombre });
+const XLSX = readFileSync(new URL('./referencias/nomina_ejemplo.xlsx', import.meta.url));
+const inflar = (d, max) => inflateRawSync(d, { maxOutputLength: max });
+const aXlsx = async filas => Buffer.from(await libroXlsx(filas).arrayBuffer());
 
 before(async () => {
   db = desdePGlite(new PGlite());
@@ -123,7 +130,9 @@ describe('Nómina por cargo por la API', () => {
   });
 
   test('rechaza otro formato, columnas de personas y archivos que no son UTF-8', async () => {
-    assert.equal((await subir(U.adm, CSV, 'nomina.xlsx')).status, 422);
+    assert.equal((await subir(U.adm, CSV, 'nomina.xlsx')).status, 422, 'un CSV con extensión .xlsx');
+    assert.equal((await subir(U.adm, XLSX, 'nomina.csv')).status, 422, 'un Excel con extensión .csv');
+    assert.equal((await subir(U.adm, CSV, 'nomina.pdf')).status, 422);
     const p = await subir(U.adm, 'rubro;proceso;cargo;nombres;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;X;1;0;0;1;1');
     assert.equal(p.status, 422);
     assert.match(p.datos.error, /quite nombres/);
@@ -182,5 +191,44 @@ describe('Evaluación del presupuesto del equipo', () => {
     assert.deepEqual((await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.su }))).evaluacion.conclusiones, ['Otra.']);
     const bit = (await db.query("SELECT count(*)::int AS n FROM bitacora WHERE accion = 'CARGAR_EVALUACION'")).rows[0].n;
     assert.equal(bit, 3);
+  });
+});
+
+describe('Nómina en Excel (.xlsx)', () => {
+  test('lee la primera hoja de un libro hecho en Excel: números, textos y encabezados con tildes', async () => {
+    const filas = interpretarNomina(await leerXlsx(XLSX, inflar));
+    assert.equal(filas.length, 4, 'la fila vacía se omite y la segunda hoja no se lee');
+    assert.deepEqual(filas[0], { rubro: 'PRESTACION', proceso: 'Docentes Pregrado', cargo: 'Profesor tiempo completo', continuan: 10, nuevos: 1, vacantes: 0, salario2026: 8000000, salario2027: 8480000, costoAnual: 1500000000.5 });
+    assert.equal(filas[2].costoAnual, 700000000, 'cifras escritas como texto con puntos de miles');
+    assert.equal(filas[3].cargo, 'Analista "senior" <2>');
+    assert.equal(filas[3].proceso, 'Financiera & tributaria');
+    assert.equal(filas[3].continuan, 2.5);
+  });
+
+  test('da lo mismo subir el CSV o el Excel', async () => {
+    const csv = interpretarNomina(CSV), xl = interpretarNomina(await leerXlsx(XLSX, inflar));
+    assert.deepEqual(xl.map(f => f.costoAnual), csv.map(f => f.costoAnual));
+  });
+
+  test('la plantilla que se descarga se puede volver a subir', async () => {
+    const f = interpretarNomina(await leerXlsx(await aXlsx([['rubro', 'proceso', 'cargo', 'continuan', 'nuevos', 'vacantes', 'salario_2026', 'salario_2027', 'costo_anual'], ['4.1', 'Docentes', 'Profesor', 20, 2, 1, 9000000, 9540000, 3200000000]]), inflar));
+    assert.equal(f[0].costoAnual, 3200000000);
+  });
+
+  test('rechaza columnas de personas, fórmulas sin valor y archivos que no son Excel', async () => {
+    await assert.rejects(async () => interpretarNomina(await leerXlsx(await aXlsx([['rubro', 'proceso', 'cargo', 'Cédula', 'continuan', 'nuevos', 'vacantes', 'salario_2027', 'costo_anual'], ['4.1', 'A', 'B', 123, 1, 0, 0, 1, 1]]), inflar)), /quite nombres/);
+    await assert.rejects(leerXlsx(readFileSync(new URL('./referencias/nomina_formula_sin_valor.xlsx', import.meta.url)), inflar), /fórmula sin valor/);
+    await assert.rejects(leerXlsx(Buffer.from('no soy un zip'), inflar), /no es un .xlsx/);
+    await assert.rejects(leerXlsx(XLSX.subarray(0, 1000), inflar), /no se pudo leer/);
+  });
+
+  test('se sube por la API, se cifra y se lee igual que el CSV', async () => {
+    const { id } = await ok(subir(U.adm, XLSX, 'Nómina 2027.xlsx'));
+    const v = await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm }));
+    assert.equal(v.carga.id, id);
+    assert.equal(v.carga.nombre, 'Nómina 2027.xlsx');
+    assert.equal(v.filas.length, 4);
+    const r = (await db.query('SELECT cifrado FROM nomina_carga WHERE id = $1', [id])).rows[0];
+    assert.ok(!Buffer.from(r.cifrado).toString('latin1').includes('Profesor'));
   });
 });

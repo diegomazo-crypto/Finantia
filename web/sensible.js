@@ -4,17 +4,19 @@
  * sensible del módulo Presupuesto; el servidor lo vuelve a revisar en cada llamada.
  */
 import { $, M, Mn, accion, api, cls, esc, fecha, modulo, nf0, nf1 } from './comun.js';
+import { libroXlsx } from './xlsx.js';
 
 const RUBROS_NOMINA = [['PRESTACION', '4.1 Prestación de servicios'], ['ADM_ACADEMICA', '4.2 Administración académica'], ['UNIDADES', '4.3 Unidades de negocio'], ['VENTAS', '4.4 Ventas'],
   ['TECNOLOGIA', '6.1 Tecnología'], ['CORPORATIVO', '6.2 Corporativo'], ['ADMINISTRATIVOS', '6.3 Administrativo'], ['DIRECCION', '6.4 Dirección institucional']];
 const NOMBRE_RUBRO = Object.fromEntries(RUBROS_NOMINA);
 const clsM = x => cls(Math.round(x / 1e6));
 const n1 = x => (Number.isInteger(x) ? nf0 : nf1).format(x);
-const descargarTexto = (nombre, texto, tipo) => {
-  const url = URL.createObjectURL(new Blob([texto], { type: tipo })), a = document.createElement('a');
+const descargar = (nombre, blob) => {
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = nombre; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
-const PLANTILLA = '﻿rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2026;salario_2027;costo_anual\n4.1;Docentes Tiempo Completo Pregrado;Profesor tiempo completo;20;2;1;9.000.000;9.540.000;3.200.000.000\n';
+const PLANTILLA = [['rubro', 'proceso', 'cargo', 'continuan', 'nuevos', 'vacantes', 'salario_2026', 'salario_2027', 'costo_anual'],
+  ['4.1', 'Docentes Tiempo Completo Pregrado', 'Profesor tiempo completo', 20, 2, 1, 9000000, 9540000, 3200000000]];
 
 /* =========================================================
    NÓMINA POR CARGO
@@ -38,8 +40,8 @@ export async function vNomina(c, v, escenario) {
   });
   const tot = sumar(filas);
   const subir = mod.editar ? `<h3>${d.carga ? 'Reemplazar la nómina' : 'Subir la nómina'}</h3>
-    <p class="nota">Un archivo CSV con una fila por cargo y las columnas rubro, proceso, cargo, continuan, nuevos, vacantes, salario_2026 y salario_2027 (salario mensual sumado de las personas del cargo) y costo_anual (pesos). El costo anual sigue la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. Sin nombres, documentos ni correos de las personas: el servidor rechaza el archivo si los trae. Se guarda cifrado; la carga anterior se retira y su contenido se borra.</p>
-    <form class="formfila" id="subir-nomina"><label class="campo">Archivo CSV (máximo 2 MB)<input type="file" name="f" required accept=".csv,.txt"></label>
+    <p class="nota">Un archivo de Excel (.xlsx, se lee la primera hoja) o CSV con una fila por cargo y las columnas rubro, proceso, cargo, continuan, nuevos, vacantes, salario_2026 y salario_2027 (salario mensual sumado de las personas del cargo) y costo_anual (pesos). El costo anual sigue la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. Sin nombres, documentos ni correos de las personas: el servidor rechaza el archivo si los trae. Se guarda cifrado; la carga anterior se retira y su contenido se borra.</p>
+    <form class="formfila" id="subir-nomina"><label class="campo">Archivo Excel o CSV (máximo 2 MB)<input type="file" name="f" required accept=".xlsx,.csv,.txt"></label>
       <button class="btn primario" type="submit" ${d.activa ? '' : 'disabled'}>Subir</button> <button class="btn" type="button" id="plantilla">Descargar plantilla</button></form>` : '';
   c.innerHTML = `<div class="tarjeta"><h2>Nómina por cargo ${anio}</h2>
     <p class="nota">Información sensible: la ven solo quienes tienen el detalle de nómina en el módulo Presupuesto. Cada consulta queda en la bitácora. No se envía al asistente de Preguntas.</p>
@@ -67,7 +69,7 @@ export async function vNomina(c, v, escenario) {
     b.setAttribute('aria-expanded', String(!abierto)); b.textContent = (abierto ? '▸ ' : '▾ ') + b.textContent.slice(2);
     c.querySelectorAll(`tr[data-de="${b.dataset.abrir}"]`).forEach(tr => { tr.hidden = abierto; });
   });
-  $('#plantilla')?.addEventListener('click', () => descargarTexto(`CEIPA_Plantilla_NominaPorCargo_${anio}.csv`, PLANTILLA, 'text/csv;charset=utf-8'));
+  $('#plantilla')?.addEventListener('click', () => descargar(`CEIPA_Plantilla_NominaPorCargo_${anio}.xlsx`, libroXlsx(PLANTILLA, 'Nomina')));
   $('#retirar-nomina')?.addEventListener('click', async e => {
     const b = e.currentTarget;
     if (b.dataset.confirmar !== '1') { b.dataset.confirmar = '1'; b.textContent = '¿Retirar y borrar? Confirmar'; return; }

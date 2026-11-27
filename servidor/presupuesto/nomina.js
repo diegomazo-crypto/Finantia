@@ -11,9 +11,11 @@
  *  - no se envía al asistente de Preguntas ni aparece en las versiones.
  */
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 import { exigir, veDetalleSensible } from '../admin/permisos.js';
 import { registrar } from '../admin/bitacora.js';
 import { falla, DATOS_INVALIDOS, NO_AUTORIZADO, NO_DISPONIBLE, NO_ENCONTRADO } from '../errores.js';
+import { esZip, leerXlsx } from './xlsx.js';
 
 const M = 'PRESUPUESTO';
 export const TAMANO_MAXIMO = 2 * 1024 * 1024;
@@ -64,6 +66,7 @@ export function leerCsv(texto) {
 
 /** Número en formato colombiano ($1.234.567,5) o con punto decimal (1234567.5). */
 export function numero(s) {
+  if (typeof s === 'number') return s; /* celda numérica de Excel */
   let x = String(s ?? '').replace(/[$\s ]/g, '');
   if (!x || x === '-') return 0;
   const neg = /^\(.*\)$/.test(x); if (neg) x = x.slice(1, -1);
@@ -82,9 +85,22 @@ function rubroDe(v) {
   return RUBROS[k] ? k : null;
 }
 
-/** Convierte el archivo en filas validadas. Lanza DATOS_INVALIDOS con el renglón que falla. */
-export function interpretarNomina(texto) {
-  const filas = leerCsv(texto);
+/**
+ * Lee el archivo subido (Excel .xlsx o CSV) y devuelve sus filas de celdas.
+ * `inflar` descomprime deflate sin encabezado (en el servidor, node:zlib; en la demostración, el navegador).
+ */
+export async function filasDelArchivo(nombre, bytes, inflar) {
+  if (/\.xlsx$/i.test(nombre)) return leerXlsx(bytes, inflar);
+  if (!/\.(csv|txt)$/i.test(nombre)) falla(DATOS_INVALIDOS, 'Suba la nómina como Excel (.xlsx) o CSV');
+  if (esZip(bytes)) falla(DATOS_INVALIDOS, 'El archivo parece un Excel con otra extensión: guárdelo como .xlsx');
+  const texto = new TextDecoder().decode(bytes);
+  if (texto.includes('\uFFFD')) falla(DATOS_INVALIDOS, 'El archivo no está en UTF-8. En Excel use "CSV UTF-8 (delimitado por comas)", o suba el .xlsx.');
+  return leerCsv(texto);
+}
+
+/** Convierte el archivo (texto CSV o filas ya leídas) en filas validadas. Lanza DATOS_INVALIDOS con el renglón que falla. */
+export function interpretarNomina(entrada) {
+  const filas = Array.isArray(entrada) ? entrada : leerCsv(entrada);
   if (filas.length < 2) falla(DATOS_INVALIDOS, 'El archivo no tiene filas de nómina');
   const enc = filas[0].map(normal);
   const prohibida = enc.find(h => PROHIBIDAS.test(h));
@@ -129,11 +145,8 @@ export function crearNomina({ llave = null, env = process.env } = {}) {
     exigirSensible(actor, 'editar');
     exigirLlave();
     const n = String(nombre || '').normalize('NFC').replace(/[\\/\x00-\x1f"<>|:*?]/g, '_').trim().slice(0, 180);
-    if (!/\.(csv|txt)$/i.test(n)) falla(DATOS_INVALIDOS, 'Suba la nómina como CSV (en Excel: Archivo › Guardar como › CSV UTF-8)');
     if (!Buffer.isBuffer(contenido) || !contenido.length) falla(DATOS_INVALIDOS, 'El archivo está vacío');
-    const texto = contenido.toString('utf8');
-    if (texto.includes('\uFFFD')) falla(DATOS_INVALIDOS, 'El archivo no está en UTF-8. En Excel use "CSV UTF-8 (delimitado por comas)".');
-    const filas = interpretarNomina(texto);
+    const filas = interpretarNomina(await filasDelArchivo(n, contenido, (d, max) => inflateRawSync(d, { maxOutputLength: max })));
     const personas = filas.reduce((s, f) => s + f.continuan + f.nuevos + f.vacantes, 0);
     const costo = filas.reduce((s, f) => s + f.costoAnual, 0);
     const huella = createHash('sha256').update(contenido).digest('hex');

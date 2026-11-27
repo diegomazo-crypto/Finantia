@@ -34,6 +34,7 @@ app = cambiar(app, "  if (recargar) location.replace('/#/');\n  location.reload(
 escribir('app.js', app);
 copiar('web/sensible.js', 'sensible.js');
 copiar('web/planeacion.js', 'planeacion.js');
+copiar('web/xlsx.js', 'xlsx.js');
 copiar('web/marca/finantia.png', 'marca/finantia.png');
 escribir('estilos.css', leer('web/estilos.css') + `
 /* Demostración */
@@ -49,13 +50,14 @@ copiar('servidor/admin/permisos.js');
 copiar('servidor/admin/bitacora.js');
 copiar('servidor/presupuesto/evaluacion.js');
 copiar('servidor/planeacion/servicio.js');
+copiar('servidor/presupuesto/xlsx.js');
 let servicio = leer('servidor/presupuesto/servicio.js');
 servicio = cambiar(servicio, "import { createHash } from 'node:crypto';\n", "const createHash = () => { throw new Error('no disponible en la demostración'); };\n", 'servicio.js');
 servicio = cambiar(servicio, "import { readFileSync } from 'node:fs';\n", '', 'servicio.js');
 servicio = cambiar(servicio, "JSON.parse(readFileSync(new URL('../../package.json', import.meta.url))).version", "'demo'", 'servicio.js');
 escribir('servidor/presupuesto/servicio.js', servicio);
 escribir('servidor/presupuesto/nomina.js', cambiar(leer('servidor/presupuesto/nomina.js'),
-  "import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';\n", '/* En la demostración no hay cifrado: la nómina no sale del navegador. */\n', 'nomina.js'));
+  "import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';\n", '/* En la demostración no hay cifrado: la nómina no sale del navegador. */\n', 'nomina.js').replace("import { inflateRawSync } from 'node:zlib';\n", ''));
 copiar('demo-enlace/api.js', 'demo/api.js');
 
 /* Página */

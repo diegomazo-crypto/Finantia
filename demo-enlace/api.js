@@ -11,7 +11,7 @@ import { crearModelo, DEFAULTS, ESCS, FIXED, lineasMensuales } from '../motor/in
 import { puede, veDetalleSensible, ROLES } from '../servidor/admin/permisos.js';
 import { ErrorFinantia } from '../servidor/errores.js';
 import { validarSupuestos, sinAuxiliar } from '../servidor/presupuesto/servicio.js';
-import { interpretarNomina } from '../servidor/presupuesto/nomina.js';
+import { filasDelArchivo, interpretarNomina } from '../servidor/presupuesto/nomina.js';
 import { versionPorDefecto, soloFlujo } from '../servidor/planeacion/servicio.js';
 import { validarEvaluacion, EJERCICIOS as EJ_EVALUACION } from '../servidor/presupuesto/evaluacion.js';
 
@@ -256,10 +256,8 @@ ruta('GET', '/api/presupuesto/ejercicios/:anio/nomina', ({ a, p }) => {
 ruta('POST', '/api/presupuesto/ejercicios/:anio/nomina', async ({ a, p, b, cab }) => {
   sensible(a, 'editar', 'la nómina por cargo');
   const nombre = decodeURIComponent(cab['X-Nombre'] || '');
-  if (!/\.(csv|txt)$/i.test(nombre)) falla('DATOS_INVALIDOS', 'Suba la nómina como CSV (en Excel: Archivo › Guardar como › CSV UTF-8)');
-  const texto = await b.text();
-  if (texto.includes('\uFFFD')) falla('DATOS_INVALIDOS', 'El archivo no está en UTF-8. En Excel use "CSV UTF-8 (delimitado por comas)".');
-  const filas = interpretarNomina(texto);
+  const inflar = async d => new Uint8Array(await new Response(new Blob([d]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  const filas = interpretarNomina(await filasDelArchivo(nombre, new Uint8Array(await b.arrayBuffer()), inflar));
   S.nomina.filter(n => n.ejercicio === Number(p.anio)).forEach(n => { n.retirado = true; n.filas = []; });
   const id = S.nomina.length + 1;
   const carga = { id, nombre, filas: filas.length, personas: filas.reduce((s, f) => s + f.continuan + f.nuevos + f.vacantes, 0), costoTotal: filas.reduce((s, f) => s + f.costoAnual, 0), huella: '—', subidoEn: ahora(), subidoPor: a.nombre };

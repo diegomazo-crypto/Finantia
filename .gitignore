@@ -4,3 +4,4 @@ node_modules/
 *.pkl
 .DS_Store
 datos-servidor/
+!pruebas/referencias/*.xlsx

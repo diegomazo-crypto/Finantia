@@ -15,8 +15,9 @@
  *
  * Usa PostgreSQL si hay DATABASE_URL; si no, una base PGlite guardada en FINANTIA_DIR_DATOS
  * (por defecto ./datos-servidor). La primera vez siembra los usuarios de ejemplo y la versión 1
- * del presupuesto 2027. No activa la nómina por cargo, y el auxiliar contable por centro de
- * costos y cuenta y la evaluación del equipo solo se cargan con FINANTIA_PRUEBAS_DETALLE=1.
+ * del presupuesto 2027. La nómina por cargo se activa solo si se da FINANTIA_LLAVE_NOMINA (y se
+ * sube desde la pantalla, nunca viene cargada). El auxiliar contable por centro de costos y
+ * cuenta y la evaluación del equipo solo se cargan con FINANTIA_PRUEBAS_DETALLE=1.
  */
 import { conectar, desdePGlite, migrar } from '../db/conexion.js';
 import { crearServidor } from './servidor.js';
@@ -33,7 +34,6 @@ if (process.env.FINANTIA_DEMO === '1') {
   /* La demo no guarda nada en disco: una llave de nómina de un solo uso basta. */
   process.env.FINANTIA_LLAVE_NOMINA ||= (await import('node:crypto')).randomBytes(32).toString('base64');
 } else if (process.env.FINANTIA_MODO_PRUEBAS === '1') {
-  delete process.env.FINANTIA_LLAVE_NOMINA; /* sin nómina por cargo en el sitio de pruebas */
   if (process.env.DATABASE_URL) db = await conectar();
   else {
     const { PGlite } = await import('@electric-sql/pglite');
