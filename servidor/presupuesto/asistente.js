@@ -33,7 +33,7 @@ const MODULOS = {
   EJECUCION: { nombre: 'Ejecución presupuestal', contexto: (...a) => contextoEjecucion(...a),
     sistema: `Estás en el módulo Ejecución presupuestal: respondes sobre la ejecución del año frente al presupuesto (real contra presupuesto a la fecha, por rubro, por mes y por unidad, con sus semáforos). El reparto por unidad puede ser aproximado cuando el balance no trae centro de costos; dilo cuando importe. ${FUERA}` },
   PLANEACION: { nombre: 'Planeación financiera', contexto: (...a) => contextoPlaneacion(...a),
-    sistema: `Estás en el módulo Planeación financiera: respondes sobre la proyección proforma 2027–2031, el flujo de caja libre, VPN, TIR, payback, escenarios, sensibilidad, supuestos de planeación y el flujo de caja mensual del presupuesto. ${FUERA}` }
+    sistema: `Estás en el módulo Planeación financiera: respondes sobre la proyección proforma 2027–2031, el flujo de caja libre, VPN, TIR, payback, escenarios, sensibilidad, supuestos de planeación, el flujo de caja mensual del presupuesto y la caja real de bancos (saldos mensuales por cuenta y destinación, caja libre real y proyectada a diciembre). El dinero en cuentas con destinación específica no financia la operación. ${FUERA}` }
 };
 
 const mill = v => (v == null || !isFinite(v) ? null : Math.round(v / 1e6));

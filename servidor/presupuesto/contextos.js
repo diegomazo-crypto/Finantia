@@ -1,11 +1,14 @@
 /**
  * Lo que el asistente recibe en Ejecución y en Planeación: solo cifras agregadas del módulo,
- * en millones de COP. Nunca nómina por persona o cargo, ni centros de costos y cuentas, ni
- * extractos o saldos bancarios, ni el pago a CINTANA aparte.
+ * en millones de COP. Nunca nómina por persona o cargo, ni centros de costos y cuentas contables, ni
+ * movimientos bancarios o terceros, ni el pago a CINTANA aparte. En Planeación sí recibe la caja
+ * real de bancos (aprobado por Diego el 2026-11-28): saldos mensuales por cuenta y destinación y la
+ * caja libre real y proyectada.
  */
 import { analizar, interpretar, RUBROS } from '../../motor/ejecucion.js';
 import { tablero } from '../ejecucion/servicio.js';
 import { proyeccionProforma, flujoDeCaja } from '../planeacion/servicio.js';
+import { cajaDelAnio } from '../planeacion/bancos.js';
 
 const mill = v => (v == null || !isFinite(v) ? null : Math.round(v / 1e6));
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -31,9 +34,28 @@ export async function contextoEjecucion(db, actor, anio) {
   };
 }
 
+/** Caja real de bancos de un año: saldos por cuenta y destinación y caja libre real y proyectada. */
+async function cajaReal(db, actor, anio) {
+  const d = await cajaDelAnio(db, actor, anio);
+  if (!d.extractos.length) return null;
+  const nombre = c => `${c.banco} · ${c.nombre}${c.terminacion ? ' ··' + c.terminacion : ''}`;
+  return {
+    anio, fuenteFlujoProyectado: d.fuente, flujoProyectadoEsAproximado: d.aproximado, cajaMinimaDeseada: mill(d.cajaMinima),
+    ultimoMesConExtractos: d.caja.ultimo ? MESES[d.caja.ultimo - 1] : null,
+    cuentas: d.cuentas.map(c => ({ cuenta: nombre(c), tipo: c.tipo, destinacion: c.destinacion === 'LIBRE' ? 'libre' : 'específica', para: c.detalle || undefined, activa: c.activa,
+      saldosFinales: Object.fromEntries(d.extractos.filter(e => e.cuentaId === c.id).map(e => [MESES[e.mes - 1], { inicial: mill(e.saldoInicial), entradas: mill(e.entradas), salidas: mill(e.salidas), final: mill(e.saldoFinal) }])) })),
+    meses: d.caja.meses.filter(x => x.tipo !== 'sin-dato').map(x => ({ mes: MESES[x.mes - 1], estado: x.tipo === 'real' ? (x.faltan.length ? 'real (faltan cuentas)' : 'real') : 'proyectado',
+      flujoPresupuestado: mill(x.flujoPpto), ajustes: mill(x.ajuste), flujo: mill(x.flujo), cajaLibre: mill(x.libre), destinacionEspecifica: mill(x.especifica), totalBancos: mill(x.total) })),
+    ajustesEsperados: d.ajustes.map(a => ({ mes: MESES[a.mes - 1], concepto: a.concepto, valor: mill(a.valor) })),
+    mesesBajoCajaMinima: d.caja.bajoMinimo.map(m => MESES[m - 1])
+  };
+}
+
 export async function contextoPlaneacion(db, actor, anio, { escenario = null } = {}) {
+  const hoy = new Date().getFullYear();
+  const cajas = (await Promise.all([...new Set([hoy, anio])].sort().map(a => cajaReal(db, actor, a)))).filter(Boolean);
   const pf = await proyeccionProforma(db, actor, { ejercicio: anio, escenario });
-  if (!pf.version) return { anio, aviso: 'Este ejercicio todavía no tiene una versión del presupuesto calculada.' };
+  if (!pf.version) return { anio, aviso: 'Este ejercicio todavía no tiene una versión del presupuesto calculada.', cajaRealBancos: cajas };
   const fl = await flujoDeCaja(db, actor, { ejercicio: anio, versionId: pf.version.id });
   const s = pf.supuestos;
   const anioP = a => ({ anio: a.anio + (a.referencia ? ' (estimado de cierre)' : ''), ingresosBrutos: mill(a.IB), descuentos: mill(a.DS), ingresosNetos: mill(a.NET), otrosIngresos: mill(a.OI), nomina: mill(a.N), catedraYCostosVariables: mill(a.CV),
@@ -52,6 +74,7 @@ export async function contextoPlaneacion(db, actor, anio, { escenario = null } =
     sensibilidadVPN: S && {
       crecimientoEstudiantesPorDescuento: { filas_crecimientoPp: S.crecimiento, columnas_descuentoPp: S.descuento, vpn: S.vpnCrecDesc.map(f => f.map(mill)) },
       tasaPorCapex: { filas_tasa: S.tasas, columnas_capexPct: S.capex, vpn: S.vpnTasaCapex.map(f => f.map(mill)) } },
+    cajaRealBancos: cajas.length ? cajas : 'Todavía no hay extractos bancarios cargados.',
     flujoCajaMensualPresupuesto: fl.version && Object.fromEntries(Object.entries(fl.version.resultados).map(([e, r]) => [e, {
       saldoFinalAnio: mill(r.caja.saldoFinal), saldoMinimo: mill(r.caja.saldoMinimo), mesSaldoMinimo: MESES[r.caja.mesMinimo],
       meses: r.caja.meses.map((m, i) => ({ mes: MESES[i], entradas: mill(m.TE), salidas: mill(m.TS), flujoNeto: mill(m.FN), saldoFinal: mill(m.SF) })) }]))

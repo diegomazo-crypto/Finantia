@@ -41,7 +41,7 @@ export async function pantallaPlaneacion(anio, versionId) {
   if (vista === 'mensual') return vMensual(cuerpo, v, escenario);
   if (vista === 'preguntas') return vPreguntasModulo(cuerpo, {
     titulo: `Preguntas sobre la planeación financiera ${d.ejercicio}`,
-    nota: 'El asistente (Claude) responde con la proyección proforma 2027–2031, el flujo de caja libre, VPN, TIR, payback, escenarios, sensibilidad, los supuestos de planeación y el flujo de caja mensual del presupuesto. No recibe saldos ni extractos bancarios, ni el pago a CINTANA aparte, ni nómina por persona.',
+    nota: 'El asistente (Claude) responde con la proyección proforma 2027–2031, el flujo de caja libre, VPN, TIR, payback, escenarios, sensibilidad, los supuestos de planeación, el flujo de caja mensual del presupuesto y la caja real de bancos (saldos por cuenta y destinación, caja libre real y proyectada). No recibe movimientos bancarios ni terceros, ni el pago a CINTANA aparte, ni nómina por persona.',
     historial: `/api/preguntas/PLANEACION/${d.ejercicio}`, enviar: `/api/preguntas/PLANEACION/${d.ejercicio}`, cuerpo: { escenario },
     sugerencias: ['¿Qué explica la diferencia de VPN entre escenarios?', '¿Qué variable mueve más el VPN?', '¿En qué año se aprieta la caja y por qué?', '¿Qué pasa con el VPN si la tasa sube a 14%?'],
     pie: `Escenario de la pregunta: ${escenario} (cámbielo arriba).`

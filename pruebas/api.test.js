@@ -391,7 +391,7 @@ describe('Preguntas al asistente', () => {
       const reqP = llamadas[llamadas.length - 1], tP = JSON.stringify(reqP.messages);
       assert.match(reqP.system, /módulo Planeación financiera/); assert.match(reqP.system, /otro módulo/);
       assert.match(tP, /sensibilidadVPN/); assert.match(tP, /flujoCajaLibre/);
-      assert.doesNotMatch(tP, /CINTANA|"FX"|extracto|banco/i);
+      assert.doesNotMatch(tP, /CINTANA|"FX"/i); assert.match(tP, /cajaRealBancos/);
       assert.equal(reqP.messages.length, 1, 'el historial de Planeación es aparte del de Presupuesto');
       const rE = await pm('EJECUCION', { pregunta: '¿Cómo vamos?' });
       assert.equal(rE.status, 200);
