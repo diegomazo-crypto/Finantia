@@ -22,6 +22,7 @@ async function iniciar() {
     }
     return pantallaIngreso();
   }
+  if (sesion.config.modo === 'pruebas') return entrar(); /* la sesión va en una cookie; sin ella el servidor muestra el ingreso */
   sesion.correo = almacen.leer('finantia.correo');
   return sesion.correo ? entrar() : pantallaIngreso();
 }
@@ -32,15 +33,23 @@ function cargarScript(src) {
 
 async function entrar() {
   try { sesion.perfil = await api('POST', '/api/ingreso', {}); }
-  catch (e) { sesion.correo = null; almacen.poner('finantia.correo', null); return pantallaIngreso(e.message); }
+  catch (e) {
+    if (sesion.config.modo === 'pruebas') return location.reload();
+    sesion.correo = null; almacen.poner('finantia.correo', null); return pantallaIngreso(e.message);
+  }
   $('#cabecera').hidden = false;
   $('#quien').textContent = sesion.perfil.nombre;
   window.addEventListener('hashchange', enrutar);
   enrutar();
 }
 
-function salir(recargar = true) {
+async function salir(recargar = true) {
   almacen.poner('finantia.correo', null);
+  if (sesion.config?.modo === 'pruebas') {
+    if (recargar) await api('POST', '/api/pruebas/salir', {}).catch(() => null);
+    else almacen.poner('finantia.motivo', 'Su sesión se cerró por inactividad o venció. Vuelva a entrar.');
+    return location.reload();
+  }
   if (sesion.msal) { sesion.msal.logoutRedirect(); return; }
   if (recargar) location.replace('/#/');
   location.reload();
@@ -477,24 +486,29 @@ async function pantallaAdmin(seccion) {
 }
 
 async function aUsuarios(c) {
-  const [us, mods] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/modulos')]);
-  const edita = sesion.perfil.admin.editar, su = sesion.perfil.superusuario;
+  const edita = sesion.perfil.admin.editar, su = sesion.perfil.superusuario, claves = su && sesion.config.modo === 'pruebas';
+  const [us, mods, cl] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/modulos'), claves ? api('GET', '/api/admin/claves-pruebas') : []]);
+  const conClave = new Map(cl.map(x => [x.usuarioId, x.creadaEn]));
   const modsAcc = mods.filter(m => m.codigo !== 'ADMINISTRACION' || su);
   const celda = (u, m) => {
     const a = u.accesos.find(x => x.modulo === m.codigo);
     if (!edita) return a ? `${ROLES[a.rol]}${a.detalle_sensible ? ' · detalle' : ''}` : '—';
     return `<select data-u="${u.id}" data-m="${m.codigo}" aria-label="Rol de ${esc(u.nombre)} en ${esc(m.nombre)}"><option value="">Sin acceso</option>
       ${Object.entries(ROLES).map(([k, t]) => `<option value="${k}" ${a?.rol === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      ${m.codigo === 'PRESUPUESTO' && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" ${a.detalle_sensible ? 'checked' : ''}> detalle sensible (nómina por cargo y evaluación del equipo)</label>` : ''}`;
+      ${(m.codigo === 'PRESUPUESTO' || m.codigo === 'EJECUCION') && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" ${a.detalle_sensible ? 'checked' : ''}> detalle sensible (${m.codigo === 'EJECUCION' ? 'centros de costos y cuentas' : 'nómina por cargo y evaluación del equipo'})</label>` : ''}`;
   };
-  c.innerHTML = `<div class="tarjeta">
+  c.innerHTML = `${claves ? `<div class="tarjeta" id="clave-nueva" hidden></div>` : ''}<div class="tarjeta">
+    ${claves ? '<p class="nota"><b>Sitio de pruebas:</b> cada persona entra con su correo y una clave personal. Genérela aquí y entréguesela por un canal privado; se muestra una sola vez. Generar una nueva o quitarla cierra sus sesiones abiertas.</p>' : ''}
     <p class="nota">Cada persona tiene un rol por módulo. Visualización consulta; Administración edita; Aprobación aprueba o devuelve. El detalle de nómina por cargo solo lo ve quien tenga la casilla marcada. Por ahora solo Presupuesto y Administración tienen pantallas; los demás accesos quedan listos para cuando se construyan.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Persona</th><th class="izq">Estado</th>${modsAcc.map(m => `<th class="izq">${esc(m.nombre)}${m.activo ? '' : ' (en pausa)'}</th>`).join('')}<th class="izq">Último ingreso</th></tr></thead><tbody>
+    <div class="tabla-cont"><table><thead><tr><th>Persona</th><th class="izq">Estado</th>${modsAcc.map(m => `<th class="izq">${esc(m.nombre)}${m.activo ? '' : ' (en pausa)'}</th>`).join('')}${claves ? '<th class="izq">Clave del sitio</th>' : ''}<th class="izq">Último ingreso</th></tr></thead><tbody>
     ${us.map(u => `<tr><td><b>${esc(u.nombre)}</b>${u.es_superusuario ? ' <span class="estado APROBADA">Superusuario</span>' : ''}<div class="nota">${esc(u.correo)}</div></td>
       <td class="izq">${u.activo ? '<span class="estado">Activo</span>' : '<span class="estado inactivo">Inactivo</span>'}
         <div class="acciones-celda">${edita && u.id !== sesion.perfil.id ? `<button class="btn" type="button" data-activo="${u.id}" data-v="${u.activo ? 0 : 1}">${u.activo ? 'Desactivar' : 'Activar'}</button>` : ''}
         ${su && u.id !== sesion.perfil.id ? `<button class="btn" type="button" data-super="${u.id}" data-v="${u.es_superusuario ? 0 : 1}">${u.es_superusuario ? 'Quitar superusuario' : 'Hacer superusuario'}</button>` : ''}</div></td>
       ${modsAcc.map(m => `<td class="izq">${celda(u, m)}</td>`).join('')}
+      ${claves ? `<td class="izq">${conClave.has(u.id) ? `<span class="nota">Desde ${fecha(conClave.get(u.id))}</span>` : '<span class="nota">Sin clave</span>'}
+        <div class="acciones-celda"><button class="btn" type="button" data-clave="${u.id}">${conClave.has(u.id) ? 'Nueva clave' : 'Generar clave'}</button>
+        ${conClave.has(u.id) ? `<button class="btn peligro" type="button" data-quitar-clave="${u.id}">Quitar</button>` : ''}</div></td>` : ''}
       <td class="izq nota">${fecha(u.ultimo_ingreso)}</td></tr>`).join('')}
     </tbody></table></div></div>
     ${edita ? `<div class="tarjeta"><h2>Agregar persona</h2><p class="nota">Use el correo institucional de Microsoft 365. La persona entra sin módulos; luego asígnele un rol.</p>
@@ -515,6 +529,23 @@ async function aUsuarios(c) {
     recargar();
   };
   c.onclick = async e => {
+    const k = e.target.closest('button[data-clave], button[data-quitar-clave], button[data-copiar]');
+    if (k?.dataset.copiar) { try { await navigator.clipboard.writeText(k.dataset.copiar); aviso('Clave copiada'); } catch { aviso('Copie la clave a mano', true); } return; }
+    if (k?.dataset.clave) {
+      try {
+        const r = await accion(() => api('POST', `/api/admin/usuarios/${k.dataset.clave}/clave-pruebas`, {}));
+        await recargar();
+        const box = $('#clave-nueva');
+        box.innerHTML = `<h3>Clave de ${esc(r.correo)}</h3><p class="clave-mostrada"><code>${esc(r.clave)}</code> <button class="btn" type="button" data-copiar="${esc(r.clave)}">Copiar</button></p>
+          <p class="nota">Entréguela por un canal privado (no por correo junto con la dirección del sitio). No se vuelve a mostrar; si se pierde, genere otra.</p>`;
+        box.hidden = false; box.scrollIntoView({ behavior: 'smooth' });
+      } catch { /* aviso ya mostrado */ }
+      return;
+    }
+    if (k?.dataset.quitarClave) {
+      try { await accion(() => api('DELETE', `/api/admin/usuarios/${k.dataset.quitarClave}/clave-pruebas`), 'Clave retirada'); } catch { /* */ }
+      return recargar();
+    }
     const b = e.target.closest('button[data-activo], button[data-super]'); if (!b) return;
     const cuerpo = b.dataset.activo ? { activo: b.dataset.v === '1' } : { superusuario: b.dataset.v === '1' };
     try { await accion(() => api('PATCH', `/api/admin/usuarios/${b.dataset.activo || b.dataset.super}`, cuerpo), 'Usuario actualizado'); } catch { /* */ }

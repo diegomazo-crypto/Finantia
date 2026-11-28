@@ -13,7 +13,9 @@ export const ACCIONES = {
   CARGAR_DATOS_BASE: 'Cargó datos base', CREAR_EJERCICIO: 'Abrió un ejercicio', CREAR_VERSION: 'Creó la versión', EDITAR_SUPUESTOS: 'Editó supuestos',
   ENVIAR_REVISION: 'Envió a revisión', APROBAR: 'Aprobó', DEVOLVER: 'Devolvió', VERSION_APROBADA: 'La versión quedó aprobada', REEMPLAZAR: 'Quedó reemplazada', CAMBIAR_SUPERUSUARIO: 'Cambió superusuario', INICIALIZAR: 'Inicializó Finantia',
   SUBIR_ARCHIVO: 'Subió un archivo', RETIRAR_ARCHIVO: 'Retiró un archivo', PREGUNTAR: 'Preguntó al asistente',
-  SUBIR_NOMINA: 'Cargó la nómina por cargo', VER_NOMINA: 'Consultó la nómina por cargo', RETIRAR_NOMINA: 'Retiró la nómina por cargo', CARGAR_EVALUACION: 'Cargó la evaluación del equipo'
+  SUBIR_NOMINA: 'Cargó la nómina por cargo', VER_NOMINA: 'Consultó la nómina por cargo', RETIRAR_NOMINA: 'Retiró la nómina por cargo', CARGAR_EVALUACION: 'Cargó la evaluación del equipo',
+  GENERAR_CLAVE_PRUEBAS: 'Generó una clave del sitio de pruebas', QUITAR_CLAVE_PRUEBAS: 'Quitó una clave del sitio de pruebas',
+  SUBIR_BALANCE: 'Subió un balance de prueba', BORRAR_BALANCE: 'Quitó un balance de prueba', SUBIR_BASE_EJECUCION: 'Cargó la base de ejecución', BORRAR_BASE_EJECUCION: 'Quitó la base de ejecución', BORRAR_VERSION: 'Borró una versión'
 };
 
 /* ---------- formatos ---------- */

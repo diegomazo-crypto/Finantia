@@ -8,6 +8,9 @@ services:
     region: virginia
     branch: claude/project-thread-gz3hbg
     autoDeploy: true
+    # Dominio propio (GoDaddy: CNAME pruebas → finantia-pruebas.onrender.com). www.finantia.ai queda para producción.
+    domains:
+      - pruebas.finantia.ai
     disk:
       name: datos
       mountPath: /datos

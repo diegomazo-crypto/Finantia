@@ -6,6 +6,7 @@ import * as AR from '../presupuesto/archivos.js';
 import * as EV from '../presupuesto/evaluacion.js';
 import * as PL from '../planeacion/servicio.js';
 import * as EJ from '../ejecucion/servicio.js';
+import * as PR from './pruebas.js';
 import { TAMANO_MAXIMO as NOMINA_MAX } from '../presupuesto/nomina.js';
 import { falla, DATOS_INVALIDOS } from '../errores.js';
 import { DEFAULTS, FIXED } from '../../motor/parametros.js';
@@ -26,7 +27,7 @@ function perfil(a) {
 
 export function rutasApi(db, auth, asistente, nomina) {
   const rutas = [
-    ruta('GET', '/api/config', () => (auth.modo === 'entra' ? { modo: 'entra', tenant: auth.tenant, clientId: auth.clientId } : (auth.pruebas ? { modo: 'desarrollo', pruebas: true } : { modo: 'desarrollo' })), { publica: true }),
+    ruta('GET', '/api/config', () => (auth.modo === 'entra' ? { modo: 'entra', tenant: auth.tenant, clientId: auth.clientId } : { modo: auth.modo }), { publica: true }),
     ruta('POST', '/api/ingreso', ({ actor }) => perfil(actor), { registrarIngreso: true }),
     ruta('GET', '/api/yo', ({ actor }) => perfil(actor)),
 
@@ -116,6 +117,11 @@ export function rutasApi(db, auth, asistente, nomina) {
     ruta('GET', '/api/presupuesto/versiones/:id/preguntas', async ({ actor, params }) => ({ activo: asistente.activo, preguntas: await asistente.historial(db, actor, entero(params.id)) })),
     ruta('POST', '/api/presupuesto/versiones/:id/preguntas', ({ actor, params, body }) => asistente.preguntar(db, actor, entero(params.id), { pregunta: body.pregunta, escenario: body.escenario || 'Moderado' }))
   ];
+  if (auth.modo === 'pruebas') rutas.push(
+    ruta('GET', '/api/admin/claves-pruebas', ({ actor }) => PR.listarClaves(db, actor)),
+    ruta('POST', '/api/admin/usuarios/:id/clave-pruebas', ({ actor, params }) => PR.generarClave(db, auth.pruebas, actor, entero(params.id))),
+    ruta('DELETE', '/api/admin/usuarios/:id/clave-pruebas', ({ actor, params }) => PR.quitarClave(db, auth.pruebas, actor, entero(params.id)))
+  );
   if (auth.modo === 'desarrollo') rutas.push(ruta('GET', '/api/desarrollo/usuarios', async () =>
     (await db.query('SELECT correo, nombre, es_superusuario FROM usuario WHERE activo ORDER BY nombre')).rows, { publica: true }));
   return rutas;

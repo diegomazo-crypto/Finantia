@@ -234,3 +234,4 @@ svg.grafico .p-real { fill: var(--accent) } svg.grafico .p-real.est { fill: var(
 .tip h4 { margin: 0 0 4px; font-size: 13px } .tip h4 small { color: var(--muted); font-weight: 400 }
 .tip p { margin: 6px 0 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em }
 .tip div { display: flex; justify-content: space-between; gap: 14px } .tip b.pos { color: var(--pos) } .tip b.neg { color: var(--neg) }
+.clave-mostrada code { font-size: 18px; letter-spacing: .05em; background: var(--sunk); padding: 6px 10px; border-radius: 6px; user-select: all }
