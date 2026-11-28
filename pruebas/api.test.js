@@ -65,7 +65,8 @@ describe('Servidor', () => {
 
   test('el perfil dice qué puede hacer cada rol', async () => {
     const adm = await ok(pedir('POST', '/api/ingreso', { como: U.adm, cuerpo: {} }));
-    assert.deepEqual(adm.modulos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: true }]);
+    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PRESUPUESTO'), { modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: true, preguntas: false });
+    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PLANEACION'), { modulo: 'PLANEACION', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: false, preguntas: false });
     assert.deepEqual(adm.admin, { ver: false, editar: false });
     const su = await ok(pedir('GET', '/api/yo', { como: U.su }));
     assert.equal(su.superusuario, true);
@@ -152,7 +153,7 @@ describe('Administración por la API', () => {
     assert.equal((await pedir('POST', '/api/admin/usuarios', { como: U.su, cuerpo: { nombre: 'Nueva', correo: 'nueva@demo.finantia' } })).status, 409);
     await ok(pedir('PUT', `/api/admin/usuarios/${id}/accesos/PRESUPUESTO`, { como: U.su, cuerpo: { rol: 'VISUALIZACION', detalleSensible: true } }));
     let us = await ok(pedir('GET', '/api/admin/usuarios', { como: U.su }));
-    assert.deepEqual(us.find(u => u.id === id).accesos, [{ modulo: 'PRESUPUESTO', rol: 'VISUALIZACION', detalle_sensible: true }]);
+    assert.deepEqual(us.find(u => u.id === id).accesos, [{ modulo: 'PRESUPUESTO', rol: 'VISUALIZACION', detalle_sensible: true, preguntas: false }]);
     assert.equal((await pedir('PUT', `/api/admin/usuarios/${id}/accesos/PRESUPUESTO`, { como: U.su, cuerpo: { rol: 'DUEÑO' } })).status, 422);
     await ok(pedir('PATCH', `/api/admin/usuarios/${id}`, { como: U.su, cuerpo: { activo: false } }));
     assert.equal((await pedir('GET', '/api/yo', { como: 'nueva@demo.finantia' })).status, 403, 'un usuario desactivado no entra');
@@ -204,6 +205,85 @@ describe('Motor en el navegador y datos base', () => {
     const m = crearModelo(datos, v.supuestos);
     for (const e of ['Pesimista', 'Moderado', 'Optimista']) assert.ok(Math.abs(m.run(m.params[e]).tot.RN - v.resultados[e].tot.RN) < 1, e);
     assert.equal((await pedir('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`)).status, 401);
+    // El reparto por centro de costos y cuenta solo llega a quien ve el detalle sensible
+    assert.equal(datos.DD, undefined); assert.equal(datos.CCN, undefined); assert.equal(datos.CTN, undefined);
+    const conAux = await ok(pedir('GET', `/api/presupuesto/datos-base/${v.datos_base_id}`, { como: U.adm }));
+    assert.ok(conAux.DD && conAux.CCN.length && conAux.CTN.length);
+  });
+
+  test('planeación financiera: flujo de caja de la versión del presupuesto, solo con acceso al módulo', async () => {
+    const d = await ok(pedir('GET', '/api/planeacion/flujo', { como: U.con }));
+    assert.equal(d.ejercicio, 2027);
+    assert.ok(d.versiones.length >= 1 && d.version);
+    for (const e of ['Pesimista', 'Moderado', 'Optimista']) {
+      const r = d.version.resultados[e];
+      assert.equal(r.mensual.length, 12); assert.equal(r.caja.meses.length, 12);
+      assert.ok(['REC', 'NOM', 'PRI', 'CES', 'PROV', 'CAP', 'SF'].every(k => k in r.caja.meses[0]));
+      assert.equal(r.supuestos, undefined);
+    }
+    assert.equal(d.version.supuestos, undefined);
+    const v1 = d.versiones[0].id;
+    assert.equal((await ok(pedir('GET', `/api/planeacion/flujo?ejercicio=2027&version=${v1}`, { como: U.con }))).version.id, v1);
+    assert.equal((await pedir('GET', '/api/planeacion/flujo?ejercicio=2031', { como: U.con })).status, 404);
+    assert.equal((await pedir('GET', '/api/planeacion/flujo')).status, 401);
+    const yo = await ok(pedir('GET', '/api/yo', { como: U.con }));
+    assert.ok(yo.modulos.some(m => m.modulo === 'PLANEACION'));
+    // sin acceso a Planeación: 403
+    const su = await ok(pedir('GET', '/api/admin/usuarios', { como: U.su }));
+    const con = su.find(u => u.correo === U.con);
+    await ok(pedir('DELETE', `/api/admin/usuarios/${con.id}/accesos/PLANEACION`, { como: U.su }));
+    assert.equal((await pedir('GET', '/api/planeacion/flujo', { como: U.con })).status, 403);
+    await ok(pedir('PUT', `/api/admin/usuarios/${con.id}/accesos/PLANEACION`, { como: U.su, cuerpo: { rol: 'VISUALIZACION' } }));
+  });
+
+  test('planeación financiera: proforma a 5 años, VPN por escenario, sensibilidad y supuestos editables', async () => {
+    const d = await ok(pedir('GET', '/api/planeacion/proforma?escenario=Moderado', { como: U.con }));
+    assert.equal(d.ejercicio, 2027); assert.equal(d.escenario, 'Moderado');
+    assert.equal(d.supuestos.tasa, 0.12);
+    const v = await ok(pedir('GET', `/api/presupuesto/versiones/${d.version.id}`, { como: U.adm }));
+    for (const e of ['Pesimista', 'Moderado', 'Optimista']) {
+      const x = d.escenarios[e];
+      assert.equal(x.anios.length, 6); assert.deepEqual(x.anios.map(a => a.anio), [2026, 2027, 2028, 2029, 2030, 2031]);
+      // con los supuestos por defecto el VPN es el mismo de la pestaña Proyección y NPV del presupuesto
+      assert.ok(Math.abs(x.metricas.vpn - v.resultados[e].metricas.npv) < 1, e);
+      assert.equal(x.anios[1].FX, undefined, 'CINTANA no va aparte');
+    }
+    const S = d.sensibilidad;
+    assert.equal(S.vpnCrecDesc.length, 5); assert.equal(S.vpnTasaCapex[2].length, 5);
+    assert.ok(Math.abs(S.vpnCrecDesc[2][2] - d.escenarios.Moderado.metricas.vpn) < 1, 'el centro es el caso base');
+    assert.ok(S.vpnCrecDesc[4][2] > S.vpnCrecDesc[0][2], 'más estudiantes, más VPN');
+    assert.ok(S.vpnCrecDesc[2][4] < S.vpnCrecDesc[2][0], 'más descuento, menos VPN');
+    assert.ok(S.vpnTasaCapex[0][2] > S.vpnTasaCapex[4][2], 'más tasa, menos VPN');
+    // solo quien edita Planeación cambia los supuestos
+    const nuevo = { ...d.supuestos, inversionInicial: 3000e6, deuda: [{ nombre: 'Crédito de prueba', saldo: 1000e6, tasa: 0.1, anios: 4 }] };
+    assert.equal((await pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.con, cuerpo: nuevo })).status, 403);
+    assert.equal((await pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.adm, cuerpo: { ...nuevo, gT: 0.2 } })).status, 422);
+    await ok(pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.adm, cuerpo: nuevo }));
+    const d2 = await ok(pedir('GET', '/api/planeacion/proforma', { como: U.con }));
+    const m = d2.escenarios.Moderado;
+    assert.ok(Math.abs(m.metricas.vpn - (d.escenarios.Moderado.metricas.vpn - 3000e6)) < 1, 'la inversión inicial va en el año 0');
+    assert.ok(m.metricas.tir != null && m.metricas.paybackSimple != null, 'con inversión hay TIR y payback');
+    assert.ok(Math.abs(m.anios.slice(1).reduce((t, a) => t + a.CAPd, 0) - 1000e6) < 1, 'la deuda se paga en el plazo');
+    assert.equal(m.anios[5].DEUDA, 0);
+    const bit = await ok(pedir('GET', '/api/admin/bitacora', { como: U.su }));
+    assert.ok((bit.filas || bit).some(b => b.accion === 'EDITAR_SUPUESTOS_PLANEACION'));
+    await ok(pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.adm, cuerpo: {} }));
+  });
+
+  test('TRM: cambia el pago a CINTANA y el puente del excedente cuadra', async () => {
+    const { id } = await ok(pedir('POST', '/api/presupuesto/versiones', { como: U.adm, cuerpo: { ejercicio: 2027, nombre: 'TRM' } }));
+    const v0 = await ok(pedir('GET', `/api/presupuesto/versiones/${id}`, { como: U.adm }));
+    assert.deepEqual(v0.cintanaUSD.slice(0, 2), [200000, 200000]);
+    const t0 = v0.resultados.Moderado.tot, b = v0.base.base2026;
+    assert.ok(Math.abs(t0.FX - 200000 * v0.porDefecto.Moderado.trm[0]) < 1);
+    // el puente de la pantalla: excedente 2026E + cambios = excedente 2027
+    const puente = b.RN + (t0.NET - b.NET) + (t0.OI - b.OI) - (t0.N - b.N) - (t0.C - b.C) - (t0.V + t0.VI - b.V - b.VI) - (t0.FX - b.FX) - (t0.F - b.F) - (t0.DA - b.DA);
+    assert.ok(Math.abs(puente - t0.RN) < 1);
+    assert.equal((await pedir('PATCH', `/api/presupuesto/versiones/${id}/supuestos`, { como: U.adm, cuerpo: { params: { Moderado: { trm: [4.2, 4100, 4200, 4300, 4400] } } } })).status, 422);
+    await ok(pedir('PATCH', `/api/presupuesto/versiones/${id}/supuestos`, { como: U.adm, cuerpo: { params: { Moderado: { trm: [4500, 4100, 4200, 4300, 4400] } } } }));
+    const t1 = (await ok(pedir('GET', `/api/presupuesto/versiones/${id}`, { como: U.adm }))).resultados.Moderado.tot;
+    assert.ok(Math.abs(t1.FX - 200000 * 4500) < 1);
+    assert.ok(Math.abs((t0.RN - t1.RN) - 200000 * (4500 - v0.porDefecto.Moderado.trm[0])) < 1);
   });
 
   test('metas por intake: valida unidad y cantidad de intakes', async () => {
@@ -259,13 +339,26 @@ describe('Archivos del ejercicio', () => {
 
 describe('Preguntas al asistente', () => {
   test('sin llave queda inactivo y lo dice', async () => {
-    const r = await ok(pedir('GET', '/api/presupuesto/versiones/1/preguntas', { como: U.con }));
+    const r = await ok(pedir('GET', '/api/presupuesto/versiones/1/preguntas', { como: U.su }));
     assert.equal(r.activo, false);
-    const p = await pedir('POST', '/api/presupuesto/versiones/1/preguntas', { como: U.con, cuerpo: { pregunta: 'Hola' } });
+    const p = await pedir('POST', '/api/presupuesto/versiones/1/preguntas', { como: U.su, cuerpo: { pregunta: 'Hola' } });
     assert.equal(p.status, 503);
   });
 
+  test('Preguntas necesita su permiso por módulo (lo asigna el Superusuario)', async () => {
+    assert.equal((await pedir('GET', '/api/presupuesto/versiones/1/preguntas', { como: U.apr })).status, 403);
+    assert.equal((await pedir('GET', '/api/preguntas/PLANEACION/2027', { como: U.apr })).status, 403);
+    const yo = await ok(pedir('GET', '/api/yo', { como: U.apr }));
+    assert.ok(yo.modulos.every(m => m.preguntas === false));
+    const su = await ok(pedir('GET', '/api/yo', { como: U.su }));
+    assert.ok(su.modulos.filter(m => m.ver).every(m => m.preguntas), 'el Superusuario siempre');
+  });
+
   test('con un cliente: envía los datos de la versión, guarda la respuesta y el historial', async () => {
+    const usuarios = await ok(pedir('GET', '/api/admin/usuarios', { como: U.su }));
+    const idDe = c => usuarios.find(u => u.correo === c).id;
+    for (const [c, m] of [[U.con, 'PRESUPUESTO'], [U.adm, 'PRESUPUESTO'], [U.con, 'PLANEACION'], [U.con, 'EJECUCION']])
+      await ok(pedir('PUT', `/api/admin/usuarios/${idDe(c)}/accesos/${m}`, { como: U.su, cuerpo: { rol: usuarios.find(u => u.correo === c).accesos.find(a => a.modulo === m).rol, detalleSensible: c === U.adm, preguntas: true } }));
     const llamadas = [];
     const cliente = { beta: { messages: { create: async req => { llamadas.push(req); return { model: req.model, stop_reason: 'end_turn', content: [{ type: 'text', text: `Respuesta ${llamadas.length}` }], usage: { input_tokens: 10, output_tokens: 5 } }; } } } };
     const { crearAsistente } = await import('../servidor/presupuesto/asistente.js');
@@ -290,6 +383,22 @@ describe('Preguntas al asistente', () => {
       const h = await (await fetch(`${b2}/api/presupuesto/versiones/1/preguntas`, { headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.adm } })).json();
       assert.equal(h.activo, true);
       assert.deepEqual(h.preguntas.map(x => x.respuesta), ['Respuesta 1', 'Respuesta 2']);
+      assert.match(llamadas[0].system, /módulo Presupuesto/);
+      // Planeación: solo cifras agregadas del módulo, sin CINTANA aparte ni bancos
+      const pm = (m, cuerpo) => fetch(`${b2}/api/preguntas/${m}/2027`, { method: 'POST', headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.con, 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+      const rp = await pm('PLANEACION', { pregunta: '¿Qué mueve el VPN?', escenario: 'Moderado' });
+      assert.equal(rp.status, 200, await rp.clone().text());
+      const reqP = llamadas[llamadas.length - 1], tP = JSON.stringify(reqP.messages);
+      assert.match(reqP.system, /módulo Planeación financiera/); assert.match(reqP.system, /otro módulo/);
+      assert.match(tP, /sensibilidadVPN/); assert.match(tP, /flujoCajaLibre/);
+      assert.doesNotMatch(tP, /CINTANA|"FX"/i); assert.match(tP, /cajaRealBancos/);
+      assert.equal(reqP.messages.length, 1, 'el historial de Planeación es aparte del de Presupuesto');
+      const rE = await pm('EJECUCION', { pregunta: '¿Cómo vamos?' });
+      assert.equal(rE.status, 200);
+      assert.match(llamadas[llamadas.length - 1].system, /módulo Ejecución presupuestal/);
+      const hP = await (await fetch(`${b2}/api/preguntas/PLANEACION/2027`, { headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.con } })).json();
+      assert.equal(hP.preguntas.length, 1);
+      assert.equal((await pm('OTRO', { pregunta: 'x' })).status, 404);
     } finally { await new Promise(r => s2.close(r)); }
   });
 });

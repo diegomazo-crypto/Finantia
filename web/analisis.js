@@ -7,6 +7,7 @@
  * versión, porque necesitan muchos cálculos (tornado, punto de equilibrio, tablas).
  */
 import { $, ESCS, M, Mn, P, accion, anchos, api, cls, esc, fecha, modulo, nf0, nf1 } from './comun.js';
+import { vPreguntasModulo } from './preguntas.js';
 
 let motor = null;
 const datosBase = new Map();
@@ -19,6 +20,17 @@ async function modeloDe(v) {
   const modelo = motor.crearModelo(datos, v.supuestos || {});
   const dif = Math.max(...ESCS.map(e => Math.abs(modelo.run(modelo.params[e]).tot.RN - v.resultados[e].tot.RN)));
   return { modelo, datos, H: datos.H, cuadra: dif < 1e6 };
+}
+
+/**
+ * Detalle del estado de resultados por línea presupuestal (Base2026) y unidad, para el drill down.
+ * g26 = 2026E; esc[e] = cada escenario. ln[li] es el total de la línea y units[i].ln[li] el de la unidad.
+ */
+export async function detalleLineas(v) {
+  const { modelo, datos, cuadra } = await modeloDe(v);
+  const g26 = modelo.pyg2026();
+  const escs = Object.fromEntries(ESCS.map(e => [e, modelo.escenario(e).pyg]));
+  return { L: datos.L, LN: datos.LN, DD: datos.DD, CCN: datos.CCN, CTN: datos.CTN, g26, esc: escs, cuadra };
 }
 
 const editable = v => modulo('PRESUPUESTO').editar && v.estado === 'BORRADOR';
@@ -136,6 +148,19 @@ export async function vCosto(c, v, escenario, ctx) {
   const o = optimizarProgramacion(modelo.run, p);
   const tope = TOPE(p);
   const aplicada = Object.values(p.grp || {}).some(x => x);
+  /* Palancas por separado: cada una se aplica o se quita sola; el impacto es el de esa palanca con las demás como están. */
+  const COM = ['pres_c', 'virt_c', 'baq_c'], ESP = ['pres_e', 'virt_e', 'baq_e'];
+  const g = p.grp || {}, estado = { vert: !!p.vert, com: COM.some(k => g[k]), esp: ESP.some(k => g[k]) };
+  const params = st => ({ vert: st.vert ? 1 : 0, grp: Object.fromEntries([...COM.map(k => [k, st.com ? o.grp[k] : 0]), ...ESP.map(k => [k, st.esp ? o.grp[k] : 0])]) });
+  const calc = st => { const r = modelo.run({ ...p, ...params(st) }); return { cat: r.units[0].C + r.units[6].C, RN: r.tot.RN }; };
+  const ninguna = calc({ vert: false, com: false, esp: false }), hoy = calc(estado);
+  const PALANCAS = [['vert', '1. Vértice', 'Comunes de Sabaneta con profesores de planta y núcleos fusionados con mentores'],
+    ['com', '2. Comunes al tope', `Cursos comunes con el tope por grupo (${tope.pres} / ${tope.virt} / ${tope.baq})`],
+    ['esp', '3. Específicos al mínimo', `Cursos específicos con al menos ${OPT0.pres_e} / ${OPT0.virt_e} / ${OPT0.baq_e} estudiantes (por validar con la Vicerrectoría Académica)`]];
+  const filasPalanca = PALANCAS.map(([k, t, d]) => {
+    const sola = calc({ vert: false, com: false, esp: false, [k]: true }), con = calc({ ...estado, [k]: true }), sin = calc({ ...estado, [k]: false });
+    return { k, t, d, activa: estado[k], sola: ninguna.cat - sola.cat, catMarg: sin.cat - con.cat, rnMarg: con.RN - sin.RN };
+  });
 
   c.innerHTML = `${avisoCuadre(cuadra)}
     <div class="tarjeta"><h2>Costo de prestación por unidad · ${escenario}</h2>
@@ -171,6 +196,16 @@ export async function vCosto(c, v, escenario, ctx) {
         <div class="kpi"><small>Con las tres palancas</small><b>${M(o.catedra[3])}</b></div>
         <div class="kpi"><small>Ahorro total</small><b class="pos">${M(o.ahorro.total)}</b><small>Vértice ${M(o.ahorro.vertice)} · comunes ${M(o.ahorro.comunes)} · específicos ${M(o.ahorro.especificos)}</small></div>
       </div>
+      <h3>Cada palanca por separado</h3>
+      <p class="nota">«Sola» es el ahorro de cátedra si se aplicara únicamente esa palanca, sin ninguna otra. «Con las demás como están» es lo que la palanca suma hoy al escenario: ahorro de cátedra y efecto sobre el resultado neto. Las palancas se traslapan (por ejemplo, Vértice cambia los grupos comunes de Sabaneta), por eso las cifras «solas» no se suman.</p>
+      <div class="tabla-cont"><table id="t-palancas"><thead><tr><th>Palanca</th><th>Estado</th><th>Ahorro de cátedra sola</th><th>Ahorro de cátedra con las demás como están</th><th>Efecto en el resultado neto</th>${ed ? '<th></th>' : ''}</tr></thead><tbody>
+      ${filasPalanca.map(x => `<tr><td class="izq"><b>${x.t}</b><br><span class="nota">${esc(x.d)}</span></td><td>${x.activa ? '<span class="estado APROBADA">Aplicada</span>' : '<span class="estado BORRADOR">Sin aplicar</span>'}</td>
+        <td class="${cls(x.sola)}">${M(x.sola)}</td><td class="${cls(x.catMarg)}">${M(x.catMarg)}</td><td class="${cls(x.rnMarg)}">${M(x.rnMarg)}</td>
+        ${ed ? `<td><button type="button" class="btn ${x.activa ? '' : 'primario'}" data-palanca="${x.k}">${x.activa ? 'Quitar' : 'Aplicar'}</button></td>` : ''}</tr>`).join('')}
+      <tr class="total"><td>Programación de hoy en el escenario</td><td></td><td></td><td>${M(ninguna.cat - hoy.cat)}</td><td class="${cls(hoy.RN - ninguna.RN)}">${M(hoy.RN - ninguna.RN)}</td>${ed ? '<td></td>' : ''}</tr>
+      </tbody></table></div>
+      <p class="nota">La fila final compara la programación de hoy con la de ninguna palanca. Cátedra de hoy: ${M(hoy.cat)}.</p>
+      <h3>Tamaño de grupo con las tres palancas</h3>
       <div class="tabla-cont"><table><thead><tr><th>Sede y tipo de curso</th><th>Estudiantes</th><th>Grupos hoy</th><th>Tamaño hoy</th><th>Tamaño optimizado</th><th>Grupos optimizados</th></tr></thead><tbody>
       ${o.segmentos.map(s => `<tr><td>${SEG[s.k]}</td><td>${nf0.format(s.estudiantes)}</td><td>${nf0.format(s.gruposHoy)}</td><td>${nf1.format(s.tamanoHoy)}</td><td>${nf1.format(s.tamanoOpt)}</td><td>${nf0.format(s.gruposOpt)}</td></tr>`).join('')}
       <tr class="total"><td>Total</td><td>${nf0.format(o.segmentos.reduce((a, s) => a + s.estudiantes, 0))}</td><td>${nf0.format(o.segmentos.reduce((a, s) => a + s.gruposHoy, 0))}</td><td></td><td></td><td>${nf0.format(o.segmentos.reduce((a, s) => a + s.gruposOpt, 0))}</td></tr>
@@ -182,6 +217,10 @@ export async function vCosto(c, v, escenario, ctx) {
     for (const k of ['pres', 'virt', 'baq']) { const x = Number(f.get(k)); if (!Number.isInteger(x) || x < 5 || x > 200) return accion(() => Promise.reject(new Error('Los topes van de 5 a 200 estudiantes'))); t[k] = x; }
     guardar(v, { params: Object.fromEntries(ESCS.map(x => [x, { tope: t }])) }, 'Topes guardados y versión recalculada', ctx);
   };
+  c.querySelectorAll('[data-palanca]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.palanca, st = { ...estado, [k]: !estado[k] }, t = PALANCAS.find(x => x[0] === k)[1];
+    guardar(v, { params: { [escenario]: params(st) } }, `${t}: ${st[k] ? 'aplicada' : 'quitada'} en el escenario ${escenario}`, ctx);
+  }));
   $('#aplicar-opt')?.addEventListener('click', () => guardar(v, { params: { [escenario]: { vert: 1, grp: o.grp } } }, `Programación optimizada aplicada al escenario ${escenario}`, ctx));
   $('#quitar-opt')?.addEventListener('click', () => guardar(v, { params: { [escenario]: { grp: Object.fromEntries(Object.keys(SEG).map(k => [k, 0])) } } }, 'Se volvió a la programación actual', ctx));
 }
@@ -247,30 +286,13 @@ export async function vSensibilidad(c, v, escenario) {
    ========================================================= */
 const SUGERENCIAS = ['¿Por qué cambia el EBITDA frente a 2026E?', '¿Qué unidades pierden plata y por qué?', '¿Cuál es el mes más apretado de caja y qué lo explica?', '¿Qué pasa con el resultado en el escenario Pesimista?'];
 
-export async function vPreguntas(c, v, escenario) {
-  const { activo, preguntas } = await api('GET', `/api/presupuesto/versiones/${v.id}/preguntas`);
-  const pintarLista = lista => lista.map(q => `<div class="qa"><div class="qa-msg u"><span class="who">${esc(q.nombre)} · ${fecha(q.fecha)} · ${esc(q.escenario)}</span>${esc(q.pregunta)}</div>
-      <div class="qa-msg"><span class="who">Asistente</span>${esc(q.respuesta)}</div></div>`).join('');
-  c.innerHTML = `<div class="tarjeta"><h2>Preguntas sobre esta versión</h2>
-    <p class="nota">El asistente (Claude) responde con los supuestos y resultados de esta versión: estado de resultados total y por unidad, proyección, mensual y caja de los tres escenarios. No recibe nómina por persona. Las preguntas quedan guardadas y las ve todo el equipo del módulo.</p>
-    ${activo ? '' : '<p class="nota neg">El asistente no está activo en este servidor. Para activarlo, el administrador del servidor debe configurar la llave de la API de Anthropic (ANTHROPIC_API_KEY).</p>'}
-    <div class="qa-log" id="qa-log">${pintarLista(preguntas) || '<p class="nota">Todavía no hay preguntas.</p>'}</div>
-    <form class="qa-form" id="qa-form"><textarea name="q" maxlength="4000" placeholder="Escriba su pregunta" ${activo ? '' : 'disabled'}></textarea><button class="btn primario" type="submit" ${activo ? '' : 'disabled'}>Preguntar</button></form>
-    <div class="qa-sug">${SUGERENCIAS.map(s => `<button class="btn" type="button" ${activo ? '' : 'disabled'}>${esc(s)}</button>`).join('')}</div>
-    <p class="nota">Escenario de la pregunta: ${escenario} (cámbielo arriba).</p></div>`;
-  const f = $('#qa-form');
-  c.querySelectorAll('.qa-sug button').forEach(b => b.onclick = () => { f.q.value = b.textContent; f.q.focus(); });
-  f.onsubmit = async e => {
-    e.preventDefault();
-    const q = f.q.value.trim(); if (!q) return;
-    const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Pensando…';
-    try {
-      const r = await accion(() => api('POST', `/api/presupuesto/versiones/${v.id}/preguntas`, { pregunta: q, escenario }));
-      const log = $('#qa-log'); if (log.querySelector('p.nota')) log.innerHTML = '';
-      log.insertAdjacentHTML('beforeend', pintarLista([{ ...r, nombre: 'Usted', fecha: new Date().toISOString() }]));
-      f.q.value = '';
-    } catch { /* aviso ya mostrado */ } finally { btn.disabled = false; btn.textContent = 'Preguntar'; }
-  };
+export function vPreguntas(c, v, escenario) {
+  return vPreguntasModulo(c, {
+    titulo: 'Preguntas sobre esta versión',
+    nota: 'El asistente (Claude) responde con los supuestos y resultados de esta versión: estado de resultados total y por unidad, proyección, mensual y caja de los tres escenarios. No recibe nómina por persona ni por cargo.',
+    historial: `/api/presupuesto/versiones/${v.id}/preguntas`, enviar: `/api/presupuesto/versiones/${v.id}/preguntas`, cuerpo: { escenario },
+    sugerencias: SUGERENCIAS, pie: `Escenario de la pregunta: ${escenario} (cámbielo arriba).`
+  });
 }
 
 /* =========================================================

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Finantia · Ingreso</title>
+<link rel="stylesheet" href="/estilos.css">
+<script type="module" src="/ingreso-pruebas.js"></script>
+</head>
+<body>
+<main class="wrap">
+  <div class="ingreso">
+    <img src="/marca/finantia.png" alt="Finantia" width="88" height="88">
+    <h1>Finantia</h1>
+    <p class="nota">Plataforma financiera de la Institución Universitaria CEIPA · sitio de pruebas</p>
+    <form class="tarjeta" id="f" autocomplete="on">
+      <p class="nota neg" id="error" role="alert" hidden></p>
+      <label class="campo">Correo<input type="email" id="correo" name="username" autocomplete="username" required></label>
+      <label class="campo">Clave<input type="password" id="clave" name="password" autocomplete="current-password" required></label>
+      <p><button class="btn primario" type="submit" id="entrar">Entrar</button></p>
+      <p class="nota">Use la clave personal que le entregó el administrador de Finantia. Tras 5 intentos fallidos el ingreso se bloquea 15 minutos, y la sesión se cierra sola después de un rato sin uso.</p>
+    </form>
+  </div>
+</main>
+</body>
+</html>

@@ -18,23 +18,46 @@ npm run demo        # http://localhost:3000
 
 Levanta una base en memoria (se borra al cerrar) con cuatro usuarios de ejemplo, uno por rol, y la versión 1 del presupuesto 2027. En modo de desarrollo no se usa Microsoft 365: la pantalla de ingreso deja elegir el usuario.
 
+### Servidor de pruebas en internet
+
+Para seguir desarrollando sobre un servidor web mientras no se conecta Microsoft 365:
+
+```bash
+docker build -t finantia .
+docker run -p 3000:3000 -e FINANTIA_CLAVE_PRUEBAS='una clave larga' -v finantia-datos:/datos finantia
+```
+
+o, sin contenedor, `FINANTIA_MODO_PRUEBAS=1 FINANTIA_CLAVE_PRUEBAS=... npm run iniciar`.
+
+- Todo el sitio, pantallas incluidas, pide la clave (autenticación básica HTTP; el usuario puede ser cualquiera). La clave debe tener 12 caracteres o más y va solo en las variables del servidor, nunca en el repositorio.
+- Dentro, la pantalla de ingreso deja elegir uno de los usuarios de ejemplo, como en `npm run demo`.
+- La base es PostgreSQL si hay `DATABASE_URL`; si no, PGlite guardada en `FINANTIA_DIR_DATOS` (en el contenedor, el volumen `/datos`). Los cambios se conservan entre reinicios. La primera vez se siembran los usuarios de ejemplo y la versión 1 del presupuesto 2027.
+- La nómina usa la llave `FINANTIA_LLAVE_NOMINA` (en Render, la genera el Blueprint) o, si falta, una llave propia que el sitio de pruebas crea la primera vez en `FINANTIA_DIR_DATOS/llave_nomina`. No viene cargada: se sube en Excel o CSV desde la pantalla, con el usuario Equipo financiero, y queda cifrada. El auxiliar contable por centro de costos y cuenta y la evaluación del equipo no se cargan salvo con `FINANTIA_PRUEBAS_DETALLE=1`.
+- Use siempre HTTPS (lo da el servicio de alojamiento): con HTTP la clave viaja sin cifrar.
+- En Render: `render.yaml` describe el servicio (contenedor, disco de 1 GB en `/datos`, clave generada por Render). En Render: New › Blueprint › este repositorio. La clave queda en Environment del servicio.
+- Para producción se quita `FINANTIA_MODO_PRUEBAS` y se configuran `ENTRA_TENANT_ID` y `ENTRA_CLIENT_ID`.
+
+### Demostración sin servidor
+
+`node herramientas/demo_enlace.mjs CARPETA` arma una copia de las pantallas que funciona sola en el navegador: `demo-enlace/api.js` responde las llamadas de la API en memoria con el mismo motor, las mismas reglas de permisos y las mismas validaciones. Sirve para mostrar Finantia sin instalar nada. Los cambios se pierden al recargar, y no hay Microsoft 365, cifrado ni asistente.
+
 ## Pantallas
 
 | Sección | Qué muestra |
 |---|---|
 | Presupuesto › Ejercicios | Ejercicios abiertos, sus versiones y su estado; crear una versión desde cero o como copia de otra |
 | Presupuesto › Archivos | Soportes del ejercicio (Excel, CSV, PDF…, hasta 15 MB): subir, descargar y retirar; quedan en la bitácora |
-| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA y nómina dentro de cada rubro |
+| Versión › Estado de resultados | Tres escenarios frente a 2026E, margen EBITDA, puente del excedente 2026E al 2027 (con CINTANA aparte) y nómina dentro de cada rubro. Ver Total CEIPA o una unidad. Drill down de tres niveles como en Finantia Admon 1.0: rubro → línea → centro de costos → cuenta (reparto del auxiliar contable 2026, `DD`/`CCN`/`CTN` en datos/base2026.json, que el servidor solo entrega a quien tiene el detalle sensible; sin él se ven las líneas con la nómina agrupada). Los subtotales se abren por unidad |
 | Versión › Ingresos | Puente del ingreso por unidad y por escenario, metas de nuevos por intake (editables), maestrías por cohortes y Barranquilla |
-| Versión › Costo de prestación | Costo por unidad, Vértice frente a tradicional, topes por grupo (editables) y programación académica optimizada (se aplica al escenario) |
+| Versión › Costo de prestación | Costo por unidad, Vértice frente a tradicional, topes por grupo (editables) y programación académica optimizada: cada palanca (Vértice, comunes al tope, específicos al mínimo) se aplica o se quita por separado, con su ahorro sola y su efecto con las demás como están; o las tres juntas |
 | Versión › Sensibilidad | Tornado, punto de equilibrio y metas inversas, tablas volumen × descuento y volumen × SMMLV |
-| Versión › Nómina por cargo | Solo con el detalle sensible. Nómina por rubro, proceso y cargo cargada en CSV, cifrada en la base; comparada con la nómina del modelo por rubro |
+| Versión › Nómina por cargo | Solo con el detalle sensible. Nómina por rubro, proceso y cargo cargada en Excel (.xlsx) o CSV, cifrada en la base; la plantilla se descarga en Excel; comparada con la nómina del modelo por rubro |
 | Versión › Evaluación del equipo | Solo ejercicio 2027 y con el detalle sensible. Presupuesto del equipo frente a la versión (rubros y unidades), partidas por proceso, observaciones y conclusiones |
 | Versión › Preguntas | Preguntas a Claude sobre la versión; se guardan para el equipo. Se activa con `ANTHROPIC_API_KEY` en el servidor |
-| Versión › Por unidad | Estado de resultados de las siete unidades, EBITDA por unidad e ingreso neto frente a 2026E |
-| Versión › Mensual y caja | Resultado mes a mes y flujo de caja con el saldo mínimo |
+| Versión › Por unidad | Estado de resultados de las siete unidades (cada rubro se abre en sus líneas del presupuesto), EBITDA por unidad e ingreso neto frente a 2026E |
+| Planeación financiera › Flujo de caja | Como en Finantia Admon 1.0: gráfico y detalle del resultado mensual con la estructura CEIPA (año y % del ingreso neto), y flujo de caja por método directo con gráfico (flujo neto, saldo final y saldo mínimo deseado) y detalle de entradas y salidas (recaudo, otros ingresos, nómina, prima, cesantías, intereses, proveedores, bancarios, capex). Toma la versión aprobada del ejercicio (o la última) y no muestra supuestos ni nómina; el acceso es el del módulo Planeación financiera. Después: saldos de bancos semanales y proyección del mes por semana |
 | Versión › Proyección y NPV | 2026E–2031, FCF, NPV al 12%, TIR y payback simple y descontado |
-| Versión › Supuestos | Supuestos por escenario y por unidad; editables solo en borrador y por el rol Administración |
+| Versión › Supuestos | Supuestos por escenario y por unidad, y la TRM 2027–2031 con el pago a CINTANA en pesos (USD 200.000 en 2027 y 2028); editables solo en borrador y por el rol Administración |
 | Versión › Aprobación | Enviar, aprobar o devolver con observaciones, decisiones, líneas presupuestales aprobadas e historial |
 | Administración | Usuarios y su rol en cada módulo, número y orden de aprobaciones, bitácora con filtros |
 
@@ -44,8 +67,9 @@ Las pantallas usan la misma paleta y tipografía de Finantia 1.0, funcionan en t
 
 Las ven y las cargan solo quienes tienen en Presupuesto el **detalle sensible** (casilla en Administración › Usuarios; el Superusuario siempre). Sus datos no están en el repositorio: se cargan desde la pantalla.
 
-- **Nómina por cargo.** CSV UTF-8 con una fila por cargo: `rubro` (4.1…6.4 o su código), `proceso`, `cargo`, `continuan`, `nuevos`, `vacantes`, `salario_2026`, `salario_2027` (salario mensual sumado de las personas del cargo) y `costo_anual`, en pesos. El costo anual se calcula con la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. El servidor rechaza el archivo si trae columnas de nombres, documentos o correos. Se guarda cifrado con AES-256-GCM; la llave de 32 bytes va en la variable `FINANTIA_LLAVE_NOMINA` (base64) y no se guarda en la base. Para crearla: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Guárdela también en un lugar seguro fuera del servidor: si se pierde, hay que volver a cargar la nómina. Cada consulta queda en la bitácora; una carga nueva retira la anterior y borra su contenido, igual que el botón Retirar. No va a las versiones ni al asistente.
-- **Evaluación del equipo.** Solo existe para el ejercicio 2027. Se carga un JSON con las cifras del equipo en pesos (`rubros`: clave del estado de resultados, `equipo`, `lectura`; `unidades`: PRE…BAQ), `partidas` por proceso, `observaciones` y `conclusiones`. La columna Modelo la calcula la pantalla con la versión y el escenario que se están viendo.
+- **Plan de nómina por persona (como el Excel v21 y Finantia Admon 1.0).** Lo normal es subir los dos archivos del equipo, en cualquier orden: el plan (Cedula, Nombre colaborador, Centro de costos, Salario 2027, Costo anual, Area, Item informe, Nodo) y la base de nómina (Documento, Nombre, Cargo, Salario). Se cruzan por cédula como en la 1.0: de la base salen el cargo y el salario 2026 (quien no está queda como nuevo); factor prestacional = costo anual ÷ (12 × salario 2027); sin salario 2027, con costo es bolsa y sin costo vacante; quien está en dos filas pesa 0,5 en cada una; la fila del modelo y la unidad salen de `datos/nomina_mapa.json` (asignación por ítem informe, nodo y centro de costos tomada del Excel v21, sin datos personales). Con datos equivalentes al v21 da $28.182 M frente a $28.177 M (la diferencia son las 6 personas cuyo salario 2026 salió del auxiliar contable). También sirve el Excel del modelo (se lee la hoja Nomina2027) o un libro con sus columnas: cédula, nombre, centro de costos, área, proceso, nodo, salario mensual 2026 y 2027, factor prestacional, fila modelo, unidad modelo, bolsa, cargo y peso persona. `motor/nomina.js` clasifica a cada persona con la regla de la columna I (sin salario 2027: bolsa si tiene bolsa, si no vacante; sin salario 2026: nuevo; con ambos: continúa), calcula el costo anual de la columna M (incremento desde abril, piso del SMMLV 2027 y del salario integral desde enero, factor prestacional), agrupa por proceso y aplica "Cargos a costear" (solo nuevos, sin vacantes ni nuevos, solo vacantes, vacantes y nuevos) y el total de personas editable por proceso. Con el botón *Aplicar a la versión* la nómina por línea y unidad (fila modelo − 5; REPARTO con la participación 2026 de `datos/base2026.json` → `REP`, la de Nomina_Asignacion) queda en los supuestos de la versión (`LP` y `nominaPlan`, sin datos de personas) y la versión se recalcula. Con el plan del Excel v21 da los mismos $28.177 M y la misma nómina por línea y unidad. *Volver a la nómina de los datos base* lo quita.
+- **Nómina por cargo (alternativa).** Excel (.xlsx; se lee la primera hoja, con el valor calculado de las fórmulas) o CSV UTF-8, con una fila por cargo: `rubro` (4.1…6.4 o su código), `proceso`, `cargo`, `continuan`, `nuevos`, `vacantes`, `salario_2026`, `salario_2027` (salario mensual sumado de las personas del cargo) y `costo_anual`, en pesos. El costo anual se calcula con la regla del modelo: el incremento rige desde el 1 de abril (enero a marzo con el salario 2026), salvo el salario mínimo y el integral, que se ajustan desde el 1 de enero. Puede traer `cedula` y `nombre` (o `nombres` y `apellidos`) de cada persona, que se necesitan para la auditoría contable (decisión de Diego, 2026-11-27): van solo en el contenido cifrado, los ve solo quien tiene el detalle sensible y no aparecen en la bitácora; correos y teléfonos se ignoran. Son datos personales (Ley 1581 de 2012). Se guarda cifrado con AES-256-GCM; la llave de 32 bytes va en la variable `FINANTIA_LLAVE_NOMINA` (base64) y no se guarda en la base. Para crearla: `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Guárdela también en un lugar seguro fuera del servidor: si se pierde, hay que volver a cargar la nómina. Cada consulta queda en la bitácora; una carga nueva retira la anterior y borra su contenido, igual que el botón Retirar. No va a las versiones ni al asistente.
+- **Evaluación del equipo.** Solo existe para el ejercicio 2027 y viene cargada desde la instalación (`datos/evaluacion2027.json`: el modelo frente al Excel que planeó el equipo financiero; `herramientas/inicializar.js`, `npm run demo` y la demostración la cargan). Se puede reemplazar con un JSON con las cifras del equipo en pesos (`rubros`: clave del estado de resultados, `equipo`, `lectura`; `unidades`: PRE…BAQ), `partidas` por proceso, `observaciones` y `conclusiones`. La columna Modelo la calcula la pantalla con la versión y el escenario que se están viendo.
 
 ### Asistente (pestaña Preguntas)
 
@@ -63,6 +87,7 @@ Envía a la API de Anthropic los supuestos y los resultados agregados de la vers
 | `motor/programacion.js` | Programación académica optimizada (3 palancas) | Solo en el simulador |
 | `motor/index.js` | `crearModelo()`: punto de entrada | |
 | `datos/base2026.json` | Base 2026E por código, línea y unidad, estacionalidad y plan de nómina por línea | Base2026, Estacionalidad, Nomina_Rubros |
+| `datos/nomina_mapa.json` | Ítem informe → fila del modelo y área; nodo, centro de costos e ítem → unidad | Nomina2027 (columnas C, D, E, F, N, O) |
 
 Las fórmulas se copiaron de Finantia Admon 1.0 sin cambios; solo se reorganizaron en módulos.
 
@@ -152,7 +177,7 @@ La aplicación se registra en Microsoft Entra ID como aplicación de una sola p�
 - `pruebas/cuadre_excel.test.js`: compara 2.727 cifras con el Excel v21 recalculado en cada escenario (presupuesto por rubro, estado de resultados por unidad, proyección y FCF 2026E–2031, métricas, mensual, flujo de caja y sensibilidad). Tolerancia ±1 millón por cifra; la diferencia máxima observada es menor a 1 peso.
 - `pruebas/servidor.test.js`: permisos, ingreso, Administración, ciclo completo de una versión con una y dos aprobaciones, y bitácora. Corre sobre PGlite (PostgreSQL en memoria); en GitHub también corre contra PostgreSQL 16.
 - `pruebas/api.test.js`: el servidor por HTTP: motor servido al navegador (mismo resultado que el servidor), metas, archivos (tipos, tamaño, permisos, retiro), asistente con un cliente de prueba, cabeceras de seguridad, archivos fuera de `web/`, sesión, permisos de cada rol, ciclo completo de una versión, Administración e ingreso con Microsoft 365 (con un verificador de prueba).
-- `pruebas/nomina.test.js`: nómina por cargo (lectura del CSV, rechazo de columnas de personas, permisos de detalle sensible, cifrado en la base, otra llave no la lee, reemplazo y retiro borran el contenido, bitácora sin cargos ni salarios) y evaluación del equipo (solo 2027, validación, permisos).
+- `pruebas/nomina.test.js`: nómina por cargo (lectura del CSV y del Excel, nombre y cédula solo en el contenido cifrado, permisos de detalle sensible, cifrado en la base, otra llave no la lee, reemplazo y retiro borran el contenido, bitácora sin cargos ni salarios) y evaluación del equipo (solo 2027, validación, permisos).
 - `pruebas/equivalencia_simulador.test.js`: 25 combinaciones aleatorias de supuestos contra el motor original de Finantia Admon 1.0, más el tornado, el punto de equilibrio y la programación optimizada tal como los muestran sus pantallas.
 
 Las referencias se regeneran con:
@@ -174,6 +199,6 @@ Las pruebas revelaron tres hojas del Excel que no siguen al resto del libro. El 
 
 ## Qué no está en el repositorio
 
-Por confidencialidad no se subieron la nómina por cargo, la evaluación del equipo ni los datos de profesores del simulador interno (`CEIPA_INT`). La nómina por cargo y la evaluación se cargan desde la pantalla (ver arriba); los datos de profesores no se usan. La nómina entra al motor como el plan del equipo agregado por línea presupuestal y unidad (`datos/base2026.json` → `LP`).
+Por confidencialidad no se subieron la nómina por cargo ni los datos de profesores del simulador interno (`CEIPA_INT`). La nómina por cargo se carga desde la pantalla (ver arriba). La evaluación del equipo 2027 sí está en `datos/evaluacion2027.json` (cifras agregadas por rubro, unidad y partida, sin nombres; por pedido de Diego, para no tener que volver a subirla) y solo la ve quien tiene el detalle sensible; los datos de profesores no se usan. La nómina entra al motor como el plan del equipo agregado por línea presupuestal y unidad (`datos/base2026.json` → `LP`).
 
 Tampoco están el Excel ni los simuladores 1.0; su respaldo está en la carpeta del proyecto `finantia_1.0/`.

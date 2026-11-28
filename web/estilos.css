@@ -153,3 +153,119 @@ dl.obs dt { font-weight: 600; margin-top: 12px }
 dl.obs dd { margin: 4px 0 0; max-width: 95ch; line-height: 1.5 }
 p.parrafo { max-width: 95ch; line-height: 1.5 }
 td.lectura, tr.total td.lectura, tr.sub td.lectura { font-weight: 400 }
+
+/* Drill down del estado de resultados */
+.fila-drill { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 4px 0 12px }
+tr.hijo td { font-weight: 400; font-size: 12px; background: var(--surface) }
+tr.hijo td:first-child { color: var(--muted); white-space: normal; min-width: 220px }
+tr.hijo.n1 td:first-child { padding-left: 40px }
+tr.hijo.n2 td:first-child { padding-left: 64px }
+tr.hijo.n3 td:first-child { padding-left: 88px }
+tr.hijo i { font-style: normal; color: var(--muted); font-size: 11px; margin-left: 4px }
+tr.hijo.n2 .enlace { color: var(--ink) }
+.fila-drill select { margin-left: 6px }
+tr.hijo.n1 .enlace { color: var(--ink) }
+
+/* Gráficos mensuales (resultado y caja) */
+svg.grafico { display: block; width: 100%; min-width: 560px; height: auto; font-size: 11px }
+svg.grafico .eje { stroke: var(--line); stroke-width: 1 } svg.grafico .eje.cero { stroke-width: 1.5; stroke: var(--muted) }
+svg.grafico .tick { fill: var(--muted) } svg.grafico .final { fill: var(--ink); font-weight: 600 }
+svg.grafico rect.pos { fill: var(--pos) } svg.grafico rect.neg { fill: var(--neg) }
+svg.grafico .linea { fill: none; stroke: var(--accent); stroke-width: 2.5 } svg.grafico .punto { fill: var(--accent) }
+svg.grafico .ref { stroke: var(--mark); stroke-width: 1.5; stroke-dasharray: 5 4 }
+.leyenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 12px; color: var(--muted); margin-top: 8px }
+.leyenda b { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -2px }
+.leyenda b.pos { background: var(--pos) } .leyenda b.neg { background: var(--neg) } .leyenda b.linea { background: var(--accent) } .leyenda b.ref { background: var(--mark) }
+tr.memo td { color: var(--muted); font-style: italic }
+td.chg{font-weight:600}
+input.pl-pers{width:5.5em}
+
+#t-plan td.n2{padding-left:2.2em}
+#t-plan td.n3{padding-left:3.6em;font-weight:400}
+#t-plan tr.persona td{font-size:.92em}
+label.casilla{display:inline-flex;align-items:center;gap:.4em;margin-right:1.2em}
+.btn.chico{padding:.15em .6em;font-size:.85em;margin-left:.6em}
+
+/* Ejecución presupuestal */
+.sem { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--line); vertical-align: 0; margin-right: 6px; flex: none }
+.sem.verde { background: var(--pos) } .sem.amarillo { background: var(--mark) } .sem.rojo { background: var(--neg) } .sem.azul { background: var(--accent) }
+.sem-t { font-size: 12px; color: var(--muted); margin-right: 10px }
+.kpi.sem-borde { border-left: 4px solid var(--line) }
+.kpi.sem-borde.verde { border-left-color: var(--pos) } .kpi.sem-borde.amarillo { border-left-color: var(--mark) } .kpi.sem-borde.rojo { border-left-color: var(--neg) } .kpi.sem-borde.azul { border-left-color: var(--accent) }
+.kpi.sem-borde small:last-child { margin-top: 4px }
+.rejilla.dos { grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)) }
+.filtros .formfila { margin-block: 0 }
+.leyenda-sem { margin-left: auto }
+ul.avisos { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 13px; max-width: 110ch }
+ul.avisos li { margin: 4px 0 }
+ol.pasos li { margin: 6px 0; max-width: 95ch } ol.pasos li.hecho { color: var(--muted) } ol.pasos li.hecho::marker { content: '✓  ' }
+svg.barras-h { min-width: 420px }
+svg.grafico .et { fill: var(--ink); font-size: 12px } svg.grafico .v { fill: var(--muted); font-size: 11px }
+svg.grafico rect.b { fill: var(--line) } svg.grafico rect.b.verde { fill: var(--pos) } svg.grafico rect.b.amarillo { fill: var(--mark) } svg.grafico rect.b.rojo { fill: var(--neg) } svg.grafico rect.b.azul { fill: var(--accent) }
+svg.grafico rect.ppto { fill: var(--line) } svg.grafico rect.real { fill: var(--accent) } svg.grafico rect.real.neg { fill: var(--neg) }
+svg.grafico rect.estimado { fill: color-mix(in srgb, var(--accent) 40%, transparent) }
+svg.grafico .linea { stroke: var(--mark) } svg.grafico .punto { fill: var(--mark) }
+.leyenda b.ppto { background: var(--line) } .leyenda b.real { background: var(--accent) } .leyenda b.estimado { background: color-mix(in srgb, var(--accent) 40%, transparent) }
+.leyenda b.linea { background: var(--mark) }
+.meses-rej { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); margin: 8px 0 12px }
+.mes-c { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; min-width: 0 }
+.mes-c small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere }
+.mes-c.cargado { border-style: solid; border-color: var(--pos); background: var(--pos-soft) }
+.mes-c.estimado { border-style: solid; background: var(--sunk) }
+.mes-c .btn.chico { margin: 4px 0 0; align-self: flex-start }
+ul.alertas li { flex-wrap: nowrap; align-items: baseline } ul.alertas .nombre { font-weight: 500 } ul.alertas .der { white-space: nowrap }
+table.interna { font-size: 12px; margin: 4px 0 }
+table.interna td, table.interna th { padding: 4px 8px }
+table.interna td:first-child, table.interna th:first-child { position: static; background: none }
+tr.det-cc > td { background: var(--bg) !important; white-space: normal }
+.alerta-est { background: color-mix(in srgb, var(--mark) 16%, transparent); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 0 0 10px; max-width: 110ch }
+
+/* Ejecución: gráfico mes a mes con cifras al pasar el mouse */
+.botonera { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 6px }
+.botonera .btn.chico { margin-left: 0; margin-right: 4px }
+.mes-graf { position: relative }
+svg.grafico .zona { fill: transparent; cursor: pointer; outline: none }
+svg.grafico .zona.activa, svg.grafico .zona:focus-visible { fill: color-mix(in srgb, var(--accent) 10%, transparent) }
+svg.grafico .l-ppto { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 6 4 }
+svg.grafico .l-real { fill: none; stroke: var(--accent); stroke-width: 2.5 }
+svg.grafico .p-real { fill: var(--accent) } svg.grafico .p-real.est { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5 }
+.leyenda b.l-ppto { background: none; border-top: 2px dashed var(--muted); height: 0; border-radius: 0; vertical-align: 3px }
+.tip { position: absolute; top: 8px; z-index: 3; min-width: 190px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; box-shadow: 0 4px 14px rgb(0 0 0 / .15); font-size: 12px; pointer-events: none }
+.tip h4 { margin: 0 0 4px; font-size: 13px } .tip h4 small { color: var(--muted); font-weight: 400 }
+.tip p { margin: 6px 0 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em }
+.tip div { display: flex; justify-content: space-between; gap: 14px } .tip b.pos { color: var(--pos) } .tip b.neg { color: var(--neg) }
+.clave-mostrada code { font-size: 18px; letter-spacing: .05em; background: var(--sunk); padding: 6px 10px; border-radius: 6px; user-select: all }
+
+/* Planeación financiera · proyección y valor */
+.objetivo { border-left: 4px solid var(--accent) }
+.objetivo > p:first-of-type { font-size: 15px; line-height: 1.5; margin: 0 0 8px }
+td.ref { color: var(--muted); background: var(--sunk) }
+th.sel, td.sel { background: var(--accent-soft) }
+table.sens td, table.sens th { text-align: right }
+table.sens tbody th { font-weight: 600; white-space: nowrap }
+td.calor.pos { background: color-mix(in srgb, var(--pos-soft) 40%, transparent) }
+td.calor.pos[data-i="2"], td.calor.pos[data-i="3"] { background: var(--pos-soft) }
+td.calor.pos[data-i="4"] { background: color-mix(in srgb, var(--pos) 30%, var(--pos-soft)) }
+td.calor.neg { background: color-mix(in srgb, var(--neg-soft) 40%, transparent); color: var(--neg) }
+td.calor.neg[data-i="2"], td.calor.neg[data-i="3"] { background: var(--neg-soft) }
+td.calor.neg[data-i="4"] { background: color-mix(in srgb, var(--neg) 25%, var(--neg-soft)) }
+td.calor.base { outline: 2px solid var(--ink); outline-offset: -2px; font-weight: 700 }
+.sup-pl label { display: flex; flex-direction: column; gap: 2px; min-width: 150px }
+.sup-pl input { width: 130px }
+#pl-sup table input[type="text"] { width: 180px } #pl-sup table input[type="number"] { width: 110px }
+/* Bancos y caja del año */
+.grafico rect.pos.proy, .grafico rect.neg.proy { opacity: .45 }
+tr.proy td { color: var(--muted); font-style: italic }
+#cta-nueva input[name="terminacion"], tr[data-id] input[name="terminacion"] { width: 70px }
+tr[data-id] input[type="text"] { min-width: 120px }
+table.ext-rej td, table.ext-rej th { text-align: right; white-space: nowrap } table.ext-rej td:first-child, table.ext-rej th:first-child, table.ext-rej td:nth-child(2), table.ext-rej th:nth-child(2) { text-align: left }
+
+/* Indicadores fijos al hacer scroll (la primera fila de tarjetas de cada pantalla) */
+.kpis.fijas { position: sticky; top: var(--alto-cab, 60px); z-index: 4; background: var(--bg); padding-block: 8px; margin-top: -8px; box-shadow: 0 6px 8px -8px rgba(0, 0, 0, .25) }
+@media (max-width: 640px) {
+  /* en celular: una franja que se desliza de lado, para no tapar la pantalla */
+  .kpis.fijas { grid-auto-flow: column; grid-auto-columns: minmax(150px, 46%); grid-template-columns: none; overflow-x: auto; gap: 8px; scrollbar-width: thin }
+  .kpis.fijas .kpi { padding: 8px 10px } .kpis.fijas .kpi b { font-size: 16px } .kpis.fijas .kpi small:nth-of-type(2) { display: none }
+}
+small.neg { color: var(--neg) }
+table.tasas { width: auto } table.tasas input { width: 9rem }

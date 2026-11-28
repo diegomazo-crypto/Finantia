@@ -7,14 +7,24 @@
  * - Modo "desarrollo": sin Microsoft 365; el navegador elige un usuario registrado y lo envía
  *   en `X-Finantia-Correo`. Solo se activa con FINANTIA_MODO_DESARROLLO=1 y nunca con
  *   NODE_ENV=production.
+ * - Modo "pruebas": servidor de pruebas en internet, sin Microsoft 365. Se activa con
+ *   FINANTIA_MODO_PRUEBAS=1 y exige FINANTIA_CLAVE_PRUEBAS (12 caracteres o más). Cada persona
+ *   entra con su correo y su clave personal y recibe una cookie de sesión (servidor/web/pruebas.js);
+ *   sin sesión, todo el sitio muestra solo la página de ingreso. Sí se permite con NODE_ENV=production.
  */
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { ingresar } from '../admin/identidad.js';
 import { cargarActor } from '../admin/permisos.js';
 import { registrar as registrarBitacora } from '../admin/bitacora.js';
 import { falla, NO_AUTORIZADO, SIN_SESION } from '../errores.js';
+import { crearPruebas, sesionDe } from './pruebas.js';
 
 export function configurarAutenticacion(env = process.env) {
+  if (env.FINANTIA_MODO_PRUEBAS === '1') {
+    const clave = String(env.FINANTIA_CLAVE_PRUEBAS || '');
+    if (clave.length < 12) throw new Error('El modo de pruebas exige FINANTIA_CLAVE_PRUEBAS de 12 caracteres o más');
+    return { modo: 'pruebas', pruebas: crearPruebas(clave, env) };
+  }
   const dev = env.FINANTIA_MODO_DESARROLLO === '1';
   if (dev && env.NODE_ENV === 'production') throw new Error('El modo de desarrollo no se permite con NODE_ENV=production');
   if (dev) return { modo: 'desarrollo' };
@@ -32,6 +42,13 @@ export function configurarAutenticacion(env = process.env) {
 
 /** Devuelve el actor de la petición o lanza NO_AUTORIZADO. `registrar` deja constancia del inicio de sesión. */
 export async function identificar(db, auth, req, { registrar = false } = {}) {
+  if (auth.modo === 'pruebas') {
+    const s = sesionDe(auth.pruebas, req);
+    if (!s) falla(SIN_SESION, 'Sin sesión o sesión cerrada por inactividad');
+    const u = (await db.query('SELECT activo FROM usuario WHERE id = $1', [s.usuarioId])).rows[0];
+    if (!u?.activo) { auth.pruebas.sesiones.delete(s.token); falla(SIN_SESION, 'Usuario desactivado'); }
+    return cargarActor(db, s.usuarioId);
+  }
   if (auth.modo === 'desarrollo') {
     const correo = String(req.headers['x-finantia-correo'] || '').trim().toLowerCase();
     if (!correo) falla(SIN_SESION, 'Sin sesión');
@@ -48,4 +65,5 @@ export async function identificar(db, auth, req, { registrar = false } = {}) {
   try { claims = await auth.verificar(h.slice(7)); } catch { falla(SIN_SESION, 'Sesión inválida o vencida'); }
   return ingresar(db, claims, { registrar });
 }
+
 

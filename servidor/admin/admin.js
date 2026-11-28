@@ -78,7 +78,7 @@ export async function cambiarSuperusuario(db, actor, usuarioId, valor) {
 }
 
 /** Asigna (o cambia) el rol de un usuario en un módulo. */
-export async function asignarAcceso(db, actor, usuarioId, modulo, rol, { detalleSensible = false } = {}) {
+export async function asignarAcceso(db, actor, usuarioId, modulo, rol, { detalleSensible = false, preguntas = false } = {}) {
   exigir(actor, M, 'editar');
   if (!ROLES.includes(rol)) falla(DATOS_INVALIDOS, `Rol desconocido: ${rol}`);
   if (modulo === M) falla(DATOS_INVALIDOS, 'El módulo de Administración es solo para el Superusuario');
@@ -87,12 +87,12 @@ export async function asignarAcceso(db, actor, usuarioId, modulo, rol, { detalle
     if (!mod) falla(NO_ENCONTRADO, `No existe el módulo ${modulo}`);
     if (!mod.activo) falla(ESTADO_INVALIDO, `El módulo ${modulo} está en pausa`);
     await leerUsuario(t, usuarioId);
-    const antes = (await t.query('SELECT rol, detalle_sensible FROM acceso WHERE usuario_id = $1 AND modulo = $2', [usuarioId, modulo])).rows[0] || null;
-    await t.query(`INSERT INTO acceso (usuario_id, modulo, rol, detalle_sensible, asignado_por) VALUES ($1, $2, $3, $4, $5)
-                   ON CONFLICT (usuario_id, modulo) DO UPDATE SET rol = EXCLUDED.rol, detalle_sensible = EXCLUDED.detalle_sensible, asignado_en = now(), asignado_por = EXCLUDED.asignado_por`,
-      [usuarioId, modulo, rol, !!detalleSensible, actor.id]);
+    const antes = (await t.query('SELECT rol, detalle_sensible, preguntas FROM acceso WHERE usuario_id = $1 AND modulo = $2', [usuarioId, modulo])).rows[0] || null;
+    await t.query(`INSERT INTO acceso (usuario_id, modulo, rol, detalle_sensible, preguntas, asignado_por) VALUES ($1, $2, $3, $4, $5, $6)
+                   ON CONFLICT (usuario_id, modulo) DO UPDATE SET rol = EXCLUDED.rol, detalle_sensible = EXCLUDED.detalle_sensible, preguntas = EXCLUDED.preguntas, asignado_en = now(), asignado_por = EXCLUDED.asignado_por`,
+      [usuarioId, modulo, rol, !!detalleSensible, !!preguntas, actor.id]);
     if (antes && antes.rol === 'APROBACION' && rol !== 'APROBACION') await t.query('DELETE FROM aprobador_orden WHERE modulo = $1 AND usuario_id = $2', [modulo, usuarioId]);
-    await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'ASIGNAR_ACCESO', entidad: 'acceso', entidadId: `${usuarioId}/${modulo}`, antes, despues: { rol, detalle_sensible: !!detalleSensible } });
+    await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'ASIGNAR_ACCESO', entidad: 'acceso', entidadId: `${usuarioId}/${modulo}`, antes, despues: { rol, detalle_sensible: !!detalleSensible, preguntas: !!preguntas } });
   });
 }
 
@@ -140,8 +140,8 @@ export async function configurarAprobacion(db, actor, modulo, { aprobacionesRequ
 export async function listarUsuarios(db, actor) {
   exigir(actor, M, 'ver');
   const us = (await db.query('SELECT id, correo, nombre, activo, es_superusuario, ultimo_ingreso FROM usuario ORDER BY nombre')).rows;
-  const ac = (await db.query('SELECT usuario_id, modulo, rol, detalle_sensible FROM acceso')).rows;
-  return us.map(u => ({ ...u, id: Number(u.id), accesos: ac.filter(a => Number(a.usuario_id) === Number(u.id)).map(({ modulo, rol, detalle_sensible }) => ({ modulo, rol, detalle_sensible })) }));
+  const ac = (await db.query('SELECT usuario_id, modulo, rol, detalle_sensible, preguntas FROM acceso')).rows;
+  return us.map(u => ({ ...u, id: Number(u.id), accesos: ac.filter(a => Number(a.usuario_id) === Number(u.id)).map(({ modulo, rol, detalle_sensible, preguntas }) => ({ modulo, rol, detalle_sensible, preguntas })) }));
 }
 
 /** Bitácora con filtros por módulo, usuario y fechas, la más reciente primero. */

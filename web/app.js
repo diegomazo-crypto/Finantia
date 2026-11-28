@@ -1,8 +1,10 @@
 /* Finantia 2.0 · pantallas (JavaScript sin dependencias). Rutas con #/… */
 
-import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos } from './analisis.js';
+import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos, detalleLineas } from './analisis.js';
 import { vNomina, vEvaluacion } from './sensible.js';
-import { $, ACCIONES, ESCS, ESTADOS, M, MESES, Mn, P, ROLES, accion, almacen, anchos, api, app, aviso, cls, esc, fecha, ganchos, kpi, modulo, nf0, nf1, sesion } from './comun.js';
+import { pantallaPlaneacion, aBancos } from './planeacion.js';
+import { pantallaEjecucion } from './ejecucion.js';
+import { $, ACCIONES, EERR, ESCS, ESTADOS, M, MESES, Mn, P, ROLES, accion, almacen, anchos, api, app, aviso, cls, esc, fecha, ganchos, kpi, modulo, nf0, nf1, sesion } from './comun.js';
 
 async function iniciar() {
   sesion.config = await api('GET', '/api/config');
@@ -20,6 +22,7 @@ async function iniciar() {
     }
     return pantallaIngreso();
   }
+  if (sesion.config.modo === 'pruebas') return entrar(); /* la sesión va en una cookie; sin ella el servidor muestra el ingreso */
   sesion.correo = almacen.leer('finantia.correo');
   return sesion.correo ? entrar() : pantallaIngreso();
 }
@@ -30,15 +33,23 @@ function cargarScript(src) {
 
 async function entrar() {
   try { sesion.perfil = await api('POST', '/api/ingreso', {}); }
-  catch (e) { sesion.correo = null; almacen.poner('finantia.correo', null); return pantallaIngreso(e.message); }
+  catch (e) {
+    if (sesion.config.modo === 'pruebas') return location.reload();
+    sesion.correo = null; almacen.poner('finantia.correo', null); return pantallaIngreso(e.message);
+  }
   $('#cabecera').hidden = false;
   $('#quien').textContent = sesion.perfil.nombre;
   window.addEventListener('hashchange', enrutar);
   enrutar();
 }
 
-function salir(recargar = true) {
+async function salir(recargar = true) {
   almacen.poner('finantia.correo', null);
+  if (sesion.config?.modo === 'pruebas') {
+    if (recargar) await api('POST', '/api/pruebas/salir', {}).catch(() => null);
+    else almacen.poner('finantia.motivo', 'Su sesión se cerró por inactividad o venció. Vuelva a entrar.');
+    return location.reload();
+  }
   if (sesion.msal) { sesion.msal.logoutRedirect(); return; }
   if (recargar) location.replace('/#/');
   location.reload();
@@ -54,7 +65,7 @@ async function pantallaIngreso(error) {
     <h1>Finantia</h1><p class="nota">Plataforma financiera de la Institución Universitaria CEIPA</p>
     <div class="tarjeta">
       ${error ? `<p class="nota neg">${esc(error)}</p>` : ''}
-      ${dev ? `<h3>Modo de desarrollo</h3><p class="nota">Sin Microsoft 365. Elija con qué usuario entrar.</p><div class="usuarios-demo" id="lista-dev">Cargando…</div>`
+      ${dev ? `<h3>${sesion.config.pruebas ? 'Sitio de pruebas' : 'Modo de desarrollo'}</h3><p class="nota">Sin Microsoft 365. Elija con qué usuario entrar.</p><div class="usuarios-demo" id="lista-dev">Cargando…</div>`
             : `<p>Ingrese con su cuenta institucional de Microsoft 365.</p><button class="btn primario" id="entrar-ms" type="button">Ingresar con Microsoft</button>`}
     </div></div>`;
   if (!dev) { $('#entrar-ms').onclick = () => sesion.msal.loginRedirect({ scopes: ['openid', 'profile', 'email'] }); return; }
@@ -71,6 +82,8 @@ async function pantallaIngreso(error) {
 function pintarMenu(actual) {
   const items = [];
   if (modulo('PRESUPUESTO')) items.push(['presupuesto', 'Presupuesto']);
+  if (modulo('EJECUCION')) items.push(['ejecucion', 'Ejecución']);
+  if (modulo('PLANEACION')) items.push(['planeacion', 'Planeación financiera']);
   if (sesion.perfil.admin.ver) items.push(['admin', 'Administración']);
   $('#menu').innerHTML = items.map(([k, t]) => `<a href="#/${k}" ${actual === k ? 'aria-current="page"' : ''}>${t}</a>`).join('');
 }
@@ -82,6 +95,8 @@ async function enrutar() {
   try {
     if (!mod) {
       if (modulo('PRESUPUESTO')) return (location.hash = '#/presupuesto');
+      if (modulo('EJECUCION')) return (location.hash = '#/ejecucion');
+      if (modulo('PLANEACION')) return (location.hash = '#/planeacion');
       if (sesion.perfil.admin.ver) return (location.hash = '#/admin');
       return sinModulos();
     }
@@ -89,6 +104,8 @@ async function enrutar() {
       if (resto[0] === 'v') return await pantallaVersion(Number(resto[1]), resto[2] || 'resumen');
       return await pantallaEjercicios(resto[0] ? Number(resto[0]) : null);
     }
+    if (mod === 'ejecucion' && modulo('EJECUCION')) return await pantallaEjecucion(resto[0] ? Number(resto[0]) : null);
+    if (mod === 'planeacion' && modulo('PLANEACION')) return await pantallaPlaneacion(resto[0] ? Number(resto[0]) : null, resto[1] ? Number(resto[1]) : null);
     if (mod === 'admin' && sesion.perfil.admin.ver) return await pantallaAdmin(resto[0] || 'usuarios');
     app.innerHTML = '<div class="tarjeta"><h2>No disponible</h2><p class="nota">No tiene acceso a esta sección.</p></div>';
   } catch (e) {
@@ -122,7 +139,9 @@ async function pantallaEjercicios(anio) {
           <span class="estado ${v.estado}">${ESTADOS[v.estado]}</span>
           <a class="nombre" href="#/presupuesto/v/${v.id}">V${v.numero} · ${esc(v.nombre)}</a>
           ${v.ronda > 1 ? `<span class="nota">ronda ${v.ronda}</span>` : ''}
-          <span class="der">Creada ${fecha(v.creada_en)}${v.aprobada_en ? ' · aprobada ' + fecha(v.aprobada_en) : ''}</span></li>`).join('')}</ul>`
+          <span class="der">Creada ${fecha(v.creada_en)}${v.aprobada_en ? ' · aprobada ' + fecha(v.aprobada_en) : ''}
+          ${mod.editar && v.estado !== 'APROBADA' && (v.estado === 'BORRADOR' || sesion.perfil.superusuario) ? ` <button type="button" class="btn peligro chico" data-borrar="${v.id}" data-nombre="V${v.numero}">Borrar</button>` : ''}</span></li>`).join('')}</ul>
+        ${mod.editar ? '<p class="nota">Un borrador lo puede borrar quien edita; una versión en revisión o reemplazada, solo el Superusuario. La versión aprobada no se borra. Al borrar queda constancia en la bitácora.</p>' : ''}`
         : '<p class="nota">Este ejercicio todavía no tiene versiones.</p>'}
       ${mod.editar ? `<form class="formfila" id="nueva-v">
           <label class="campo">Nombre de la versión<input name="nombre" required maxlength="120" placeholder="Ej.: Presupuesto ${anio} · ajuste de nómina"></label>
@@ -131,6 +150,10 @@ async function pantallaEjercicios(anio) {
     </div><section id="archivos"></section>` : '<div class="tarjeta"><p class="nota">Todavía no hay ejercicios abiertos.</p></div>'}`;
   if (ej) vArchivos($('#archivos'), anio).catch(e => { $('#archivos').innerHTML = `<div class="tarjeta"><p class="nota">${esc(e.message)}</p></div>`; });
 
+  app.querySelectorAll('[data-borrar]').forEach(b => b.addEventListener('click', async () => {
+    if (b.dataset.confirmar !== '1') { b.dataset.confirmar = '1'; b.textContent = `¿Borrar ${b.dataset.nombre}? Confirmar`; return; }
+    try { await accion(() => api('DELETE', `/api/presupuesto/versiones/${b.dataset.borrar}`), `${b.dataset.nombre} borrada`); pantallaEjercicios(anio); } catch { /* aviso ya mostrado */ }
+  }));
   $('#nuevo-ej')?.addEventListener('click', () => accion(() => api('POST', '/api/presupuesto/ejercicios', { anio: sig }), `Ejercicio ${sig} abierto`).then(() => { location.hash = '#/presupuesto/' + sig; }));
   $('#nueva-v')?.addEventListener('submit', async e => {
     e.preventDefault(); const f = new FormData(e.target);
@@ -142,9 +165,9 @@ async function pantallaEjercicios(anio) {
 /* =========================================================
    PRESUPUESTO · una versión
    ========================================================= */
-const PESTANAS = [['resumen', 'Estado de resultados'], ['ingresos', 'Ingresos'], ['unidades', 'Por unidad'], ['costo', 'Costo de prestación'], ['nomina', 'Nómina por cargo', 'sensible'], ['mensual', 'Mensual y caja'], ['proyeccion', 'Proyección y NPV'], ['sensibilidad', 'Sensibilidad'], ['evaluacion', 'Evaluación del equipo', 'sensible', 2027], ['supuestos', 'Supuestos'], ['preguntas', 'Preguntas'], ['aprobacion', 'Aprobación']];
+const PESTANAS = [['resumen', 'Estado de resultados'], ['ingresos', 'Ingresos'], ['unidades', 'Por unidad'], ['costo', 'Costo de prestación'], ['nomina', 'Nómina por cargo', 'sensible'], ['proyeccion', 'Proyección y NPV'], ['sensibilidad', 'Sensibilidad'], ['evaluacion', 'Evaluación del equipo', 'sensible', 2027], ['supuestos', 'Supuestos'], ['preguntas', 'Preguntas'], ['aprobacion', 'Aprobación']];
 /* Nómina por cargo y evaluación: solo con el detalle sensible; la evaluación del equipo existe solo para 2027. */
-const pestanasDe = v => PESTANAS.filter(([, , sens, anio]) => (!sens || modulo('PRESUPUESTO')?.detalleSensible) && (!anio || anio === v.ejercicio));
+const pestanasDe = v => PESTANAS.filter(([k, , sens, anio]) => (!sens || modulo('PRESUPUESTO')?.detalleSensible) && (!anio || anio === v.ejercicio) && (k !== 'preguntas' || modulo('PRESUPUESTO')?.preguntas));
 let cacheVersion = null;
 
 async function pantallaVersion(id, pestana) {
@@ -173,7 +196,7 @@ async function pantallaVersion(id, pestana) {
   app.querySelector('.pestanas [aria-current]')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   const cuerpo = $('#cuerpo');
   const fn = {
-    resumen: vResumen, ingresos: vIngresos, unidades: vUnidades, costo: vCosto, mensual: vMensual, proyeccion: vProyeccion,
+    resumen: vResumen, ingresos: vIngresos, unidades: vUnidades, costo: vCosto, proyeccion: vProyeccion,
     sensibilidad: vSensibilidad, supuestos: vSupuestos, preguntas: vPreguntas, aprobacion: vAprobacion, nomina: vNomina, evaluacion: vEvaluacion
   }[pestana] || vResumen;
   if (['ingresos', 'costo', 'sensibilidad'].includes(pestana)) cuerpo.innerHTML = '<p class="nota">Calculando…</p>';
@@ -182,40 +205,113 @@ async function pantallaVersion(id, pestana) {
 }
 
 
-/* Estructura del estado de resultados (misma de Finantia 1.0) */
-const EERR = [
-  ['IB', 'Ingreso bruto', 'sub'], ['DS', 'Descuentos y becas', 'det', -1], ['NET', 'Ingreso neto', 'sub'],
-  ['PRESTACION', 'Costo de prestación', 'det'], ['ADM_ACADEMICA', 'Administración académica', 'det'], ['UNIDADES', 'Unidades de negocio', 'det'], ['VENTAS', 'Ventas y mercadeo', 'det'],
-  ['CD', 'Costos directos', 'sub'], ['MB', 'Margen bruto', 'sub'],
-  ['TECNOLOGIA', 'Tecnología', 'det'], ['CORPORATIVO', 'Corporativo', 'det'], ['ADMINISTRATIVOS', 'Administrativos', 'det'], ['DIRECCION', 'Dirección', 'det'],
-  ['GO', 'Gastos de operación', 'sub'], ['RO', 'Resultado operacional', 'sub'],
-  ['OTROS_INGRESOS', 'Otros ingresos', 'det'], ['BANCARIOS', 'Gastos bancarios', 'det', -1], ['DA', 'Depreciación y amortización', 'det', -1], ['OTROS_GASTOS', 'Otros gastos', 'det', -1],
-  ['RN', 'Resultado neto', 'total'], ['EBITDA', 'EBITDA', 'sub']
-];
 
-function vResumen(c, v) {
-  const b = v.base.eerr2026, R = v.resultados;
-  c.innerHTML = `<div class="tarjeta"><h2>Estado de resultados ${v.ejercicio} · tres escenarios frente a 2026E</h2>
-    <p class="nota">Millones de pesos. La variación es la del escenario Moderado frente a 2026E.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Rubro</th><th>2026E</th>${ESCS.map(e => `<th>${e}</th>`).join('')}<th>Var. Mod.</th></tr></thead><tbody>
-    ${EERR.map(([k, t, tipo]) => {
-      const m = R.Moderado.eerr[k], var_ = b[k] ? m / b[k] - 1 : null;
-      return `<tr class="${tipo}"><td>${t}</td><td class="${cls(b[k])}">${Mn(b[k])}</td>${ESCS.map(e => `<td class="${cls(R[e].eerr[k])}">${Mn(R[e].eerr[k])}</td>`).join('')}<td>${P(var_)}</td></tr>`;
-    }).join('')}
-    <tr><td>Margen EBITDA</td><td>${P(b.EBITDA / b.NET)}</td>${ESCS.map(e => `<td>${P(R[e].eerr.EBITDA / R[e].eerr.NET)}</td>`).join('')}<td></td></tr>
-    </tbody></table></div></div>
-    <div class="tarjeta"><h3>Nómina dentro de cada rubro (escenario Moderado)</h3>
-    <div class="tabla-cont"><table><thead><tr><th>Rubro</th><th>Nómina 2026E</th><th>Nómina ${v.ejercicio}</th><th>% del rubro ${v.ejercicio}</th></tr></thead><tbody>
-    ${EERR.filter(x => x[2] === 'det' && v.resultados.Moderado.eerr['n_' + x[0]]).map(([k, t]) => { const e = v.resultados.Moderado.eerr; return `<tr><td>${t}</td><td>${Mn(b['n_' + k])}</td><td>${Mn(e['n_' + k])}</td><td>${P(e['n_' + k] / e[k])}</td></tr>`; }).join('')}
+/* ---------- Drill down del estado de resultados (el de tres niveles de Finantia Admon 1.0) ----------
+   Rubro → línea del presupuesto → centro de costos → cuenta, con el reparto del auxiliar contable 2026.
+   El centro de costos y la cuenta solo llegan a quien tiene el detalle sensible; sin él, las líneas de
+   nómina de cada rubro se ven agrupadas, como en el simulador de la Junta. Los subtotales se abren por unidad.
+   Arriba se escoge Total CEIPA o una unidad, y toda la tabla pasa a esa unidad. */
+/** Líneas de un renglón: ingreso bruto y descuentos son las suyas; los rubros, las de su bloque. */
+const lineasDe = (D, k) => !D ? [] : D.L.map(([b, c], li) => (k === 'IB' || k === 'DS' ? c === k : b === k && c !== 'IB' && c !== 'DS') ? li : -1).filter(li => li >= 0);
+const hayValor = (xs, min = 5e5) => xs.some(x => Math.abs(x || 0) >= min);
+const botonAbrir = (id, t) => `<button type="button" class="enlace" data-abrir="${id}" aria-expanded="false">▸ ${t}</button>`;
+const marcar = (b, a) => { b.setAttribute('aria-expanded', String(a)); b.textContent = (a ? '▾ ' : '▸ ') + b.textContent.slice(2); };
+/** Abre y cierra las filas de un árbol: al cerrar un renglón se cierran también sus hijos. */
+function arbol(tabla) {
+  const cerrar = id => tabla.querySelectorAll(`tr[data-de="${id}"]`).forEach(tr => {
+    tr.hidden = true; const h = tr.querySelector('[data-abrir]'); if (h && h.getAttribute('aria-expanded') === 'true') { marcar(h, false); cerrar(h.dataset.abrir); }
+  });
+  tabla.addEventListener('click', e => {
+    const b = e.target.closest('[data-abrir]'); if (!b) return;
+    const abrir = b.getAttribute('aria-expanded') !== 'true';
+    marcar(b, abrir);
+    if (abrir) tabla.querySelectorAll(`tr[data-de="${b.dataset.abrir}"]`).forEach(tr => { tr.hidden = false; }); else cerrar(b.dataset.abrir);
+  });
+  return () => tabla.querySelectorAll('[data-abrir][aria-expanded="true"]').forEach(b => { if (!b.closest('tr[data-de]')) { marcar(b, false); cerrar(b.dataset.abrir); } });
+}
+async function detalleSeguro(v) { try { return await detalleLineas(v); } catch { return null; } }
+
+/** Del excedente 2026E al de cada escenario (el puente de Finantia Admon 1.0), con CINTANA aparte. */
+function puenteExcedente(v) {
+  const b = v.base.base2026, R = v.resultados;
+  const pasos = [['Ingreso neto', t => t.NET - b.NET], ['Otros ingresos (con ESIC)', t => t.OI - b.OI], ['Nómina', t => -(t.N - b.N)], ['Cátedra y mentores', t => -(t.C - b.C)],
+    ['Variables y ligados al ingreso', t => -(t.V + t.VI - b.V - b.VI)], ['CINTANA', t => -(t.FX - b.FX)], ['Fijos, ESIC y no recurrentes', t => -(t.F - b.F)], ['Depreciación y amortización', t => -(t.DA - b.DA)]];
+  return `<div class="tarjeta"><h3>Del excedente 2026E al ${v.ejercicio}</h3>
+    <p class="nota">Cuánto suma o resta cada concepto al resultado neto frente a 2026E. Millones de pesos; un valor negativo es un mayor costo o un menor ingreso. CINTANA = USD ${nf0.format(v.cintanaUSD?.[0] ?? 0)} × la TRM ${v.ejercicio} del escenario (ver Supuestos).</p>
+    <div class="tabla-cont"><table><thead><tr><th>Concepto</th>${ESCS.map(e => `<th>${e}</th>`).join('')}</tr></thead><tbody>
+    <tr class="sub"><td>Excedente 2026E</td>${ESCS.map(() => `<td class="${cls(b.RN)}">${Mn(b.RN)}</td>`).join('')}</tr>
+    ${pasos.map(([t, f]) => `<tr class="det"><td>${t}</td>${ESCS.map(e => { const x = f(R[e].tot); return `<td class="${cls(x)}">${Mn(x)}</td>`; }).join('')}</tr>`).join('')}
+    <tr class="total"><td>Excedente ${v.ejercicio}</td>${ESCS.map(e => `<td class="${cls(R[e].tot.RN)}">${Mn(R[e].tot.RN)}</td>`).join('')}</tr>
     </tbody></table></div></div>`;
 }
 
-function vUnidades(c, v, escenario) {
+async function vResumen(c, v) {
+  const b0 = v.base.eerr2026, R = v.resultados, BU = v.base.eerr2026Unidades, n = v.base.names;
+  const D = await detalleSeguro(v), aux = !!D?.DD;
+  const u0 = Number(almacen.leer('finantia.eerrUnidad') ?? -1), ui = Number.isInteger(u0) && u0 >= 0 && u0 < n.length ? u0 : -1;
+  const b = ui < 0 ? b0 : BU[ui], eerr = e => ui < 0 ? R[e].eerr : R[e].eerrUnidades[ui];
+  const G = D ? [D.g26, ...ESCS.map(e => D.esc[e])] : [];
+  const lin = (g, li) => (ui < 0 ? g.tot : g.units[ui]).ln[li] || 0;
+  /* Una entrada del auxiliar es [unidad (−1 = sobre el total de la línea), centro de costos, cuenta, participación] */
+  const aux1 = (g, li, [uu, , , sh]) => uu < 0 ? lin(g, li) * sh : ui >= 0 && ui !== uu ? 0 : (g.units[uu].ln[li] || 0) * sh;
+  const celdas = xs => xs.map(x => `<td class="${cls(x)}">${Mn(x)}</td>`).join('') + `<td>${P(xs[0] ? xs[2] / xs[0] - 1 : null)}</td>`;
+  const fila = (nivel, de, t, xs, id, hijos) => `<tr class="hijo n${nivel}" data-de="${de}" hidden><td>${id && hijos ? botonAbrir(id, t) : t}</td>${celdas(xs)}</tr>${id && hijos ? hijos : ''}`;
+  const porMod = (a, z) => Math.abs(z.xs[2]) - Math.abs(a.xs[2]);
+  const nombre = ([cod, nom]) => `${esc(nom)} <i>${esc(cod)}</i>`;
+  function cuentas(li, id, ens) {
+    return ens.map(en => ({ en, xs: G.map(g => aux1(g, li, en)) })).filter(x => hayValor(x.xs, 5e4)).sort(porMod)
+      .map(({ en, xs }) => fila(3, id, nombre(D.CTN[en[2]]), xs)).join('');
+  }
+  function centros(li, id) {
+    const por = new Map(); (D.DD[li] || []).forEach(en => { if (!por.has(en[1])) por.set(en[1], []); por.get(en[1]).push(en); });
+    return [...por].map(([cc, ens]) => ({ cc, ens, xs: G.map(g => ens.reduce((s, en) => s + aux1(g, li, en), 0)) })).filter(x => hayValor(x.xs)).sort(porMod)
+      .map(({ cc, ens, xs }) => { const idc = `${id}-c${cc}`; return fila(2, id, nombre(D.CCN[cc]), xs, idc, cuentas(li, idc, ens)); }).join('');
+  }
+  function hijosDe(k, tipo) {
+    if (tipo !== 'det' && k !== 'IB') return ui < 0 ? n.map((t, i) => ({ t, xs: [BU[i][k], ...ESCS.map(e => R[e].eerrUnidades[i][k])] })).filter(x => hayValor(x.xs)).map(x => fila(1, k, esc(x.t), x.xs)).join('') : '';
+    let ls = lineasDe(D, k), html = '';
+    if (!aux && ls.length < 2) return '';
+    if (!aux) {
+      const nom = ls.filter(li => D.L[li][1] === 'N'), xs = G.map(g => nom.reduce((s, li) => s + lin(g, li), 0));
+      if (nom.length && hayValor(xs)) html += fila(1, k, 'Nómina (todas las líneas del rubro)', xs);
+      ls = ls.filter(li => D.L[li][1] !== 'N');
+    }
+    return html + ls.map(li => ({ li, xs: G.map(g => lin(g, li)) })).filter(x => hayValor(x.xs)).sort(porMod)
+      .map(({ li, xs }) => { const id = `${k}-l${li}`; return fila(1, k, esc(D.LN[li]), xs, id, aux ? centros(li, id) : ''); }).join('');
+  }
+  c.innerHTML = `${D && !D.cuadra ? '<p class="nota neg">El detalle se calculó de nuevo en el navegador y no coincide del todo con lo guardado (el motor cambió). Edite y guarde un supuesto para recalcular la versión.</p>' : ''}
+    <div class="tarjeta"><h2>Estado de resultados ${v.ejercicio} · tres escenarios frente a 2026E</h2>
+    <p class="nota">Millones de pesos. La variación es la del escenario Moderado frente a 2026E. ${!D ? 'El detalle por línea no está disponible en este momento.' : aux ? 'Toque un rubro (▸) para abrirlo en tres niveles: línea, centro de costos y cuenta (reparto según el auxiliar contable 2026).' : 'Toque un rubro (▸) para ver sus líneas.'}${ui < 0 ? ' Los subtotales se abren por unidad.' : ''}</p>
+    <div class="fila-drill">
+      <label>Ver <select id="ver-unidad">${['Total CEIPA', ...n].map((t, i) => `<option value="${i - 1}" ${i - 1 === ui ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+      <button type="button" class="btn" id="cerrar-todo">Cerrar todo</button>
+    </div>
+    <div class="tabla-cont"><table id="t-eerr"><thead><tr><th>Rubro${ui < 0 ? '' : ' · ' + esc(n[ui])}</th><th>2026E</th>${ESCS.map(e => `<th>${e}</th>`).join('')}<th>Var. Mod.</th></tr></thead><tbody>
+    ${EERR.map(([k, t, tipo]) => {
+      const m = eerr('Moderado')[k], var_ = b[k] ? m / b[k] - 1 : null, hijos = D ? hijosDe(k, tipo) : '';
+      return `<tr class="${tipo}"><td>${hijos ? botonAbrir(k, t) : t}</td><td class="${cls(b[k])}">${Mn(b[k])}</td>${ESCS.map(e => `<td class="${cls(eerr(e)[k])}">${Mn(eerr(e)[k])}</td>`).join('')}<td>${P(var_)}</td></tr>${hijos}`;
+    }).join('')}
+    <tr><td>Margen EBITDA</td><td>${P(b.NET ? b.EBITDA / b.NET : null)}</td>${ESCS.map(e => `<td>${P(eerr(e).NET ? eerr(e).EBITDA / eerr(e).NET : null)}</td>`).join('')}<td></td></tr>
+    </tbody></table></div></div>
+    ${ui < 0 ? puenteExcedente(v) : ''}
+    <div class="tarjeta"><h3>Nómina dentro de cada rubro (escenario Moderado${ui < 0 ? '' : ' · ' + esc(n[ui])})</h3>
+    <div class="tabla-cont"><table><thead><tr><th>Rubro</th><th>Nómina 2026E</th><th>Nómina ${v.ejercicio}</th><th>% del rubro ${v.ejercicio}</th></tr></thead><tbody>
+    ${EERR.filter(x => x[2] === 'det' && eerr('Moderado')['n_' + x[0]]).map(([k, t]) => { const e = eerr('Moderado'); return `<tr><td>${t}</td><td>${Mn(b['n_' + k])}</td><td>${Mn(e['n_' + k])}</td><td>${P(e[k] ? e['n_' + k] / e[k] : null)}</td></tr>`; }).join('')}
+    </tbody></table></div></div>`;
+  $('#cerrar-todo').onclick = arbol($('#t-eerr'));
+  $('#ver-unidad').onchange = e => { almacen.poner('finantia.eerrUnidad', e.target.value); vResumen(c, v); };
+}
+
+async function vUnidades(c, v, escenario) {
   const r = v.resultados[escenario], U = r.eerrUnidades, B = v.base.eerr2026Unidades, n = v.base.names;
+  const D = await detalleSeguro(v), G = D?.esc[escenario];
   const max = Math.max(...U.map(u => Math.abs(u.EBITDA)), 1);
-  c.innerHTML = `<div class="tarjeta"><h2>Estado de resultados por unidad · ${escenario}</h2><p class="nota">Millones de pesos.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Rubro</th>${n.map(x => `<th>${esc(x)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
-    ${EERR.map(([k, t, tipo]) => `<tr class="${tipo}"><td>${t}</td>${U.map(u => `<td class="${cls(u[k])}">${Mn(u[k])}</td>`).join('')}<td class="${cls(r.eerr[k])}">${Mn(r.eerr[k])}</td></tr>`).join('')}
+  const lineas = (k, tipo) => (tipo === 'det' && k !== 'DS' ? lineasDe(D, k) : []).map(li => ({ li, xs: [...G.units.map(u => u.ln[li]), G.tot.ln[li]] })).filter(x => hayValor(x.xs))
+    .sort((a, z) => Math.abs(z.xs[7]) - Math.abs(a.xs[7]))
+    .map(({ li, xs }) => `<tr class="hijo n1" data-de="${k}" hidden><td>${esc(D.LN[li])}</td>${xs.map(x => `<td class="${cls(x)}">${Mn(x)}</td>`).join('')}</tr>`).join('');
+  c.innerHTML = `<div class="tarjeta"><h2>Estado de resultados por unidad · ${escenario}</h2><p class="nota">Millones de pesos.${D ? ' Toque un rubro para ver sus líneas del presupuesto en cada unidad.' : ''}</p>
+    <div class="tabla-cont"><table id="t-unidades"><thead><tr><th>Rubro</th>${n.map(x => `<th>${esc(x)}</th>`).join('')}<th>Total</th></tr></thead><tbody>
+    ${EERR.map(([k, t, tipo]) => { const h = lineas(k, tipo); return `<tr class="${tipo}"><td>${h ? botonAbrir(k, t) : t}</td>${U.map(u => `<td class="${cls(u[k])}">${Mn(u[k])}</td>`).join('')}<td class="${cls(r.eerr[k])}">${Mn(r.eerr[k])}</td></tr>${h}`; }).join('')}
     <tr><td>Margen EBITDA</td>${U.map(u => `<td>${P(u.NET ? u.EBITDA / u.NET : null)}</td>`).join('')}<td>${P(r.eerr.EBITDA / r.eerr.NET)}</td></tr>
     </tbody></table></div></div>
     <div class="rejilla">
@@ -225,22 +321,7 @@ function vUnidades(c, v, escenario) {
     <div class="tarjeta"><h3>Ingreso neto frente a 2026E</h3><div class="tabla-cont"><table><thead><tr><th>Unidad</th><th>2026E</th><th>${v.ejercicio}</th><th>Var.</th></tr></thead><tbody>
       ${U.map((u, i) => `<tr><td>${esc(n[i])}</td><td>${Mn(B[i].IB - B[i].DS)}</td><td>${Mn(u.NET)}</td><td>${P((B[i].IB - B[i].DS) ? u.NET / (B[i].IB - B[i].DS) - 1 : null)}</td></tr>`).join('')}
     </tbody></table></div></div></div>`;
-}
-
-function vMensual(c, v, escenario) {
-  const r = v.resultados[escenario], m = r.mensual, cj = r.caja.meses;
-  const filas = [['NET', 'Ingreso neto'], ['CD', 'Costos directos'], ['GO', 'Gastos de operación'], ['EBITDA', 'EBITDA'], ['RN', 'Resultado neto'], ['ACC', 'Resultado acumulado']];
-  const caja = [['SI', 'Saldo inicial'], ['TE', 'Entradas'], ['TS', 'Salidas'], ['FN', 'Flujo neto'], ['SF', 'Saldo final']];
-  const tot = k => m.reduce((s, x) => s + (x[k] || 0), 0);
-  c.innerHTML = `<div class="tarjeta"><h2>Resultado mensual ${v.ejercicio} · ${escenario}</h2><p class="nota">Millones de pesos.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Rubro</th>${MESES.map(x => `<th>${x}</th>`).join('')}<th>Año</th></tr></thead><tbody>
-    ${filas.map(([k, t]) => `<tr class="${['EBITDA', 'RN'].includes(k) ? 'sub' : ''}"><td>${t}</td>${m.map(x => `<td class="${cls(x[k])}">${Mn(x[k])}</td>`).join('')}<td>${k === 'ACC' ? '' : Mn(tot(k))}</td></tr>`).join('')}
-    </tbody></table></div></div>
-    <div class="tarjeta"><h2>Flujo de caja ${v.ejercicio}</h2>
-    <p class="nota">Saldo mínimo ${M(r.caja.saldoMinimo)} en ${MESES[r.caja.mesMinimo]} · saldo final ${M(r.caja.saldoFinal)} · ${r.caja.mesesBajoMinimo} meses por debajo del colchón de caja.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Concepto</th>${MESES.map(x => `<th>${x}</th>`).join('')}</tr></thead><tbody>
-    ${caja.map(([k, t]) => `<tr class="${k === 'SF' ? 'total' : ''}"><td>${t}</td>${cj.map(x => `<td class="${cls(x[k])}">${Mn(x[k])}</td>`).join('')}</tr>`).join('')}
-    </tbody></table></div></div>`;
+  arbol($('#t-unidades'));
 }
 
 function vProyeccion(c, v, escenario) {
@@ -277,10 +358,20 @@ function vSupuestos(c, v) {
   };
   c.innerHTML = `<div class="tarjeta"><div class="cabeza"><h2>Supuestos por escenario</h2>
       <div class="acciones">${editable ? '<button class="btn primario" id="guardar" type="button" disabled>Guardar y recalcular</button>' : ''}</div></div>
-    <p class="nota">${editable ? 'Valores en porcentaje. Los cambios quedan en la bitácora con el valor anterior.' : v.estado === 'BORRADOR' ? 'Solo lectura: su rol no edita supuestos.' : 'Solo lectura: la versión ya no es un borrador. Para cambiarla, cree una copia.'} Marcados con • los que difieren del valor por defecto.</p>
+    <p class="nota">${editable ? 'Valores en porcentaje (la TRM, en pesos). Los cambios quedan en la bitácora con el valor anterior.' : v.estado === 'BORRADOR' ? 'Solo lectura: su rol no edita supuestos.' : 'Solo lectura: la versión ya no es un borrador. Para cambiarla, cree una copia.'} Marcados con • los que difieren del valor por defecto.</p>
     <div class="tabla-cont"><table><thead><tr><th>Supuesto</th>${ESCS.map(e => `<th>${e}</th>`).join('')}</tr></thead><tbody>
     ${SUP_ESC.map(([k, t]) => `<tr><td>${t}</td>${ESCS.map(e => `<td>${cambiado(e, k) ? '• ' : ''}${inp(e, k, val(e, k))}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></div>
+    <div class="tarjeta"><h3>TRM y pago a CINTANA</h3>
+      <p class="nota">TRM en pesos por dólar. El pago a CINTANA es de USD ${nf0.format(v.cintanaUSD?.[0] ?? 0)} al año en ${(v.cintanaUSD || []).map((u, i) => u ? v.ejercicio + i : null).filter(Boolean).join(' y ')}; el contrato sigue vigente en ${v.ejercicio + 2} sin pago y luego termina, así que la TRM de esos años no cambia el resultado. El costo va en Dirección institucional (línea Cintana) y, en 2026E, fue de ${M(v.base.base2026.FX)}.</p>
+      <div class="tabla-cont"><table><thead><tr><th>Escenario</th>${val('Moderado', 'trm').map((_, i) => `<th>TRM ${v.ejercicio + i}</th>`).join('')}</tr></thead><tbody>
+      ${ESCS.map(e => `<tr><td>${cambiado(e, 'trm') ? '• ' : ''}${e}</td>${val(e, 'trm').map((x, i) => `<td>${editable ? `<input class="inp-num" type="number" step="50" min="1000" inputmode="decimal" data-k="${e}.trm.${i}" data-cop="1" value="${x}" aria-label="TRM ${v.ejercicio + i} ${e}">` : nf0.format(x)}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div>
+      <h4>Pago a CINTANA en pesos</h4>
+      <div class="tabla-cont"><table><thead><tr><th>Escenario</th>${val('Moderado', 'trm').map((_, i) => `<th>${v.ejercicio + i}</th>`).join('')}</tr></thead><tbody>
+      <tr class="det"><td>USD</td>${val('Moderado', 'trm').map((_, i) => `<td>${nf0.format(v.cintanaUSD?.[i] || 0)}</td>`).join('')}</tr>
+      ${ESCS.map(e => `<tr><td>${e}</td>${val(e, 'trm').map((x, i) => `<td>${Mn((v.cintanaUSD?.[i] || 0) * x)}</td>`).join('')}</tr>`).join('')}
+      </tbody></table></div><p class="nota">Millones de pesos.</p></div>
     ${SUP_UNI.map(([k, t]) => `<div class="tarjeta"><h3>${t} por unidad</h3><div class="tabla-cont"><table><thead><tr><th>Escenario</th>${v.base.names.map(n => `<th>${esc(n)}</th>`).join('')}</tr></thead><tbody>
       ${ESCS.map(e => `<tr><td>${cambiado(e, k) ? '• ' : ''}${e}</td>${val(e, k).map((x, i) => `<td>${inp(e, k, x, i)}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></div>`).join('')}`;
@@ -288,7 +379,7 @@ function vSupuestos(c, v) {
   const pend = {};
   c.addEventListener('input', e => {
     const k = e.target.dataset.k; if (!k) return;
-    pend[k] = Number(e.target.value) / 100; $('#guardar').disabled = !Object.keys(pend).length;
+    pend[k] = Number(e.target.value) / (e.target.dataset.cop ? 1 : 100); $('#guardar').disabled = !Object.keys(pend).length;
   });
   $('#guardar').onclick = async () => {
     const params = {};
@@ -384,35 +475,42 @@ function vLineas(lineas, v) {
 /* =========================================================
    ADMINISTRACIÓN
    ========================================================= */
-const ADM = [['usuarios', 'Usuarios y accesos'], ['aprobacion', 'Aprobaciones'], ['bitacora', 'Bitácora']];
+const CON_PREGUNTAS = ['PRESUPUESTO', 'EJECUCION', 'PLANEACION'];
+const ADM = [['usuarios', 'Usuarios y accesos'], ['aprobacion', 'Aprobaciones'], ['bancos', 'Bancos y cuentas'], ['bitacora', 'Bitácora']];
 
 async function pantallaAdmin(seccion) {
   app.innerHTML = `<div class="cabeza"><div><div class="miga">Administración</div><h1>${esc((ADM.find(a => a[0] === seccion) || ADM[0])[1])}</h1></div></div>
     <nav class="pestanas" aria-label="Secciones">${ADM.map(([k, t]) => `<a href="#/admin/${k}" ${k === seccion ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>
     <section id="cuerpo"></section>`;
-  const fn = { usuarios: aUsuarios, aprobacion: aAprobacion, bitacora: aBitacora }[seccion] || aUsuarios;
+  const fn = { usuarios: aUsuarios, aprobacion: aAprobacion, bancos: aBancos, bitacora: aBitacora }[seccion] || aUsuarios;
   await fn($('#cuerpo'));
 }
 
 async function aUsuarios(c) {
-  const [us, mods] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/modulos')]);
-  const edita = sesion.perfil.admin.editar, su = sesion.perfil.superusuario;
+  const edita = sesion.perfil.admin.editar, su = sesion.perfil.superusuario, claves = su && sesion.config.modo === 'pruebas';
+  const [us, mods, cl] = await Promise.all([api('GET', '/api/admin/usuarios'), api('GET', '/api/admin/modulos'), claves ? api('GET', '/api/admin/claves-pruebas') : []]);
+  const conClave = new Map(cl.map(x => [x.usuarioId, x.creadaEn]));
   const modsAcc = mods.filter(m => m.codigo !== 'ADMINISTRACION' || su);
   const celda = (u, m) => {
     const a = u.accesos.find(x => x.modulo === m.codigo);
     if (!edita) return a ? `${ROLES[a.rol]}${a.detalle_sensible ? ' · detalle' : ''}` : '—';
     return `<select data-u="${u.id}" data-m="${m.codigo}" aria-label="Rol de ${esc(u.nombre)} en ${esc(m.nombre)}"><option value="">Sin acceso</option>
       ${Object.entries(ROLES).map(([k, t]) => `<option value="${k}" ${a?.rol === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      ${m.codigo === 'PRESUPUESTO' && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" ${a.detalle_sensible ? 'checked' : ''}> detalle sensible (nómina por cargo y evaluación del equipo)</label>` : ''}`;
+      ${(m.codigo === 'PRESUPUESTO' || m.codigo === 'EJECUCION') && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" data-preg="${a.preguntas ? 1 : 0}" ${a.detalle_sensible ? 'checked' : ''}> detalle sensible (${m.codigo === 'EJECUCION' ? 'centros de costos y cuentas' : 'nómina por cargo y evaluación del equipo'})</label>` : ''}
+      ${CON_PREGUNTAS.includes(m.codigo) && a ? `<label class="nota"><input type="checkbox" data-pregu="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" data-sensv="${a.detalle_sensible ? 1 : 0}" ${a.preguntas ? 'checked' : ''}> Preguntas (asistente)</label>` : ''}`;
   };
-  c.innerHTML = `<div class="tarjeta">
-    <p class="nota">Cada persona tiene un rol por módulo. Visualización consulta; Administración edita; Aprobación aprueba o devuelve. El detalle de nómina por cargo solo lo ve quien tenga la casilla marcada. Por ahora solo Presupuesto y Administración tienen pantallas; los demás accesos quedan listos para cuando se construyan.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Persona</th><th class="izq">Estado</th>${modsAcc.map(m => `<th class="izq">${esc(m.nombre)}${m.activo ? '' : ' (en pausa)'}</th>`).join('')}<th class="izq">Último ingreso</th></tr></thead><tbody>
+  c.innerHTML = `${claves ? `<div class="tarjeta" id="clave-nueva" hidden></div>` : ''}<div class="tarjeta">
+    ${claves ? '<p class="nota"><b>Sitio de pruebas:</b> cada persona entra con su correo y una clave personal. Genérela aquí y entréguesela por un canal privado; se muestra una sola vez. Generar una nueva o quitarla cierra sus sesiones abiertas.</p>' : ''}
+    <p class="nota">Cada persona tiene un rol por módulo. Visualización consulta; Administración edita; Aprobación aprueba o devuelve. El detalle sensible solo lo ve quien tenga la casilla marcada. La pestaña Preguntas (asistente) de cada módulo solo la ve quien tenga marcada «Preguntas» en ese módulo; el Superusuario la ve siempre.</p>
+    <div class="tabla-cont"><table><thead><tr><th>Persona</th><th class="izq">Estado</th>${modsAcc.map(m => `<th class="izq">${esc(m.nombre)}${m.activo ? '' : ' (en pausa)'}</th>`).join('')}${claves ? '<th class="izq">Clave del sitio</th>' : ''}<th class="izq">Último ingreso</th></tr></thead><tbody>
     ${us.map(u => `<tr><td><b>${esc(u.nombre)}</b>${u.es_superusuario ? ' <span class="estado APROBADA">Superusuario</span>' : ''}<div class="nota">${esc(u.correo)}</div></td>
       <td class="izq">${u.activo ? '<span class="estado">Activo</span>' : '<span class="estado inactivo">Inactivo</span>'}
         <div class="acciones-celda">${edita && u.id !== sesion.perfil.id ? `<button class="btn" type="button" data-activo="${u.id}" data-v="${u.activo ? 0 : 1}">${u.activo ? 'Desactivar' : 'Activar'}</button>` : ''}
         ${su && u.id !== sesion.perfil.id ? `<button class="btn" type="button" data-super="${u.id}" data-v="${u.es_superusuario ? 0 : 1}">${u.es_superusuario ? 'Quitar superusuario' : 'Hacer superusuario'}</button>` : ''}</div></td>
       ${modsAcc.map(m => `<td class="izq">${celda(u, m)}</td>`).join('')}
+      ${claves ? `<td class="izq">${conClave.has(u.id) ? `<span class="nota">Desde ${fecha(conClave.get(u.id))}</span>` : '<span class="nota">Sin clave</span>'}
+        <div class="acciones-celda"><button class="btn" type="button" data-clave="${u.id}">${conClave.has(u.id) ? 'Nueva clave' : 'Generar clave'}</button>
+        ${conClave.has(u.id) ? `<button class="btn peligro" type="button" data-quitar-clave="${u.id}">Quitar</button>` : ''}</div></td>` : ''}
       <td class="izq nota">${fecha(u.ultimo_ingreso)}</td></tr>`).join('')}
     </tbody></table></div></div>
     ${edita ? `<div class="tarjeta"><h2>Agregar persona</h2><p class="nota">Use el correo institucional de Microsoft 365. La persona entra sin módulos; luego asígnele un rol.</p>
@@ -424,15 +522,35 @@ async function aUsuarios(c) {
     const t = e.target;
     try {
       if (t.matches('select[data-u]')) {
-        await accion(() => t.value ? api('PUT', `/api/admin/usuarios/${t.dataset.u}/accesos/${t.dataset.m}`, { rol: t.value, detalleSensible: false })
+        const prev = us.find(x => x.id === Number(t.dataset.u))?.accesos.find(x => x.modulo === t.dataset.m);
+        await accion(() => t.value ? api('PUT', `/api/admin/usuarios/${t.dataset.u}/accesos/${t.dataset.m}`, { rol: t.value, detalleSensible: !!prev?.detalle_sensible, preguntas: !!prev?.preguntas })
           : api('DELETE', `/api/admin/usuarios/${t.dataset.u}/accesos/${t.dataset.m}`), 'Acceso actualizado');
       } else if (t.matches('input[data-sens]')) {
-        await accion(() => api('PUT', `/api/admin/usuarios/${t.dataset.sens}/accesos/${t.dataset.m}`, { rol: t.dataset.rol, detalleSensible: t.checked }), 'Acceso actualizado');
+        await accion(() => api('PUT', `/api/admin/usuarios/${t.dataset.sens}/accesos/${t.dataset.m}`, { rol: t.dataset.rol, detalleSensible: t.checked, preguntas: t.dataset.preg === '1' }), 'Acceso actualizado');
+      } else if (t.matches('input[data-pregu]')) {
+        await accion(() => api('PUT', `/api/admin/usuarios/${t.dataset.pregu}/accesos/${t.dataset.m}`, { rol: t.dataset.rol, detalleSensible: t.dataset.sensv === '1', preguntas: t.checked }), 'Acceso actualizado');
       } else return;
     } catch { /* aviso ya mostrado */ }
     recargar();
   };
   c.onclick = async e => {
+    const k = e.target.closest('button[data-clave], button[data-quitar-clave], button[data-copiar]');
+    if (k?.dataset.copiar) { try { await navigator.clipboard.writeText(k.dataset.copiar); aviso('Clave copiada'); } catch { aviso('Copie la clave a mano', true); } return; }
+    if (k?.dataset.clave) {
+      try {
+        const r = await accion(() => api('POST', `/api/admin/usuarios/${k.dataset.clave}/clave-pruebas`, {}));
+        await recargar();
+        const box = $('#clave-nueva');
+        box.innerHTML = `<h3>Clave de ${esc(r.correo)}</h3><p class="clave-mostrada"><code>${esc(r.clave)}</code> <button class="btn" type="button" data-copiar="${esc(r.clave)}">Copiar</button></p>
+          <p class="nota">Entréguela por un canal privado (no por correo junto con la dirección del sitio). No se vuelve a mostrar; si se pierde, genere otra.</p>`;
+        box.hidden = false; box.scrollIntoView({ behavior: 'smooth' });
+      } catch { /* aviso ya mostrado */ }
+      return;
+    }
+    if (k?.dataset.quitarClave) {
+      try { await accion(() => api('DELETE', `/api/admin/usuarios/${k.dataset.quitarClave}/clave-pruebas`), 'Clave retirada'); } catch { /* */ }
+      return recargar();
+    }
     const b = e.target.closest('button[data-activo], button[data-super]'); if (!b) return;
     const cuerpo = b.dataset.activo ? { activo: b.dataset.v === '1' } : { superusuario: b.dataset.v === '1' };
     try { await accion(() => api('PATCH', `/api/admin/usuarios/${b.dataset.activo || b.dataset.super}`, cuerpo), 'Usuario actualizado'); } catch { /* */ }
@@ -505,3 +623,12 @@ function detalleBitacora(r) {
 }
 
 iniciar().catch(e => { app.innerHTML = `<div class="tarjeta"><h2>Finantia no pudo iniciar</h2><p class="nota">${esc(e.message)}</p></div>`; });
+
+/* Indicadores fijos: la primera fila de tarjetas de resumen de cada pantalla queda visible bajo el
+   encabezado al bajar (pedido de Diego). Se marca sola cada vez que se pinta una pantalla. */
+const cab = document.querySelector('header.top');
+if (cab && 'ResizeObserver' in window) new ResizeObserver(() => document.documentElement.style.setProperty('--alto-cab', cab.offsetHeight + 'px')).observe(cab);
+new MutationObserver(() => {
+  const k = app.querySelector('.kpis');
+  if (k && !k.classList.contains('fijas')) { app.querySelectorAll('.kpis.fijas').forEach(x => x.classList.remove('fijas')); k.classList.add('fijas'); }
+}).observe(app, { childList: true, subtree: true });

@@ -1,0 +1,400 @@
+{
+ "referencia": "Equipo: versión \"costos y gastos ajustados\" del presupuesto que envió el equipo financiero (PRESUPUESTO_2027_ENVIADO_V2). Las lecturas, las partidas por proceso y las observaciones son del análisis hecho con el modelo v16 (noviembre de 2026), tomado de Finantia Admon 1.0.",
+ "rubros": [
+  {
+   "clave": "NET",
+   "equipo": 61393746759,
+   "lectura": "El equipo proyecta $2.407 M más (v16): sobre todo URE ($9.086 M frente a la meta de $5.000 M) y Barranquilla ($848 M más). Especializaciones Sabaneta queda por debajo en el equipo; pregrado Sabaneta queda $921 M por debajo tras ajustar los antiguos (ver sección B)."
+  },
+  {
+   "clave": "CD",
+   "equipo": 40792795800,
+   "lectura": ""
+  },
+  {
+   "clave": "PRESTACION",
+   "equipo": 19207799747,
+   "lectura": "Sobre todo costo de proyectos URE (+$1.163 M por la mayor venta) y cátedra de maestrías (+$255 M). El modelo tiene más cátedra en Barranquilla (−$184 M)."
+  },
+  {
+   "clave": "ADM_ACADEMICA",
+   "equipo": 12453655809,
+   "lectura": "ESIC $371 M que no debería estar, Barranquilla +$349 M (arriendo de sede, FCF), acreditación +$196 M y calidad +$167 M. Investigación −$742 M porque el equipo topea proyectos y matriz. v14: el modelo pasó a 4.4 Ventas un asesor de admisión de Barranquilla ($45 M); el equipo lo deja aquí."
+  },
+  {
+   "clave": "UNIDADES",
+   "equipo": 1415326096,
+   "lectura": "El modelo queda $234 M por debajo: $226 M son el Director de admisiones, que la v14 pasó a 4.4 Ventas y el equipo deja aquí. Sin esa reclasificación son casi iguales (la nómina de la URE es la del plan, con incremento desde abril)."
+  },
+  {
+   "clave": "VENTAS",
+   "equipo": 7716014148,
+   "lectura": "El modelo queda $1.668 M por encima. $1.132 M son tres cargos comerciales que la v14 trajo a 4.4 (Gerente comercial $860 M, Director de admisiones $226 M y un asesor de admisión de Barranquilla $45 M) y que el equipo deja en 6.4, 4.3 y 4.2. El resto ($536 M) es publicidad: el modelo la escala con la meta de nuevos; el equipo la fija."
+  },
+  {
+   "clave": "MB",
+   "equipo": 20600950959,
+   "lectura": ""
+  },
+  {
+   "clave": "GO",
+   "equipo": 19329224497,
+   "lectura": ""
+  },
+  {
+   "clave": "TECNOLOGIA",
+   "equipo": 2801776707,
+   "lectura": "Nómina del plan con incremento desde abril; la diferencia está en costos de infraestructura y rubros nuevos de sistemas."
+  },
+  {
+   "clave": "CORPORATIVO",
+   "equipo": 4664986153,
+   "lectura": "Gestión administrativa: el equipo incluye partidas de familia por validar (ver D)."
+  },
+  {
+   "clave": "ADMINISTRATIVOS",
+   "equipo": 4382979231,
+   "lectura": "Financiera y tributaria −$441 M en costos; contratación y nómina +$203 M (BUK, eventos, bonos)."
+  },
+  {
+   "clave": "DIRECCION",
+   "equipo": 7479482406,
+   "lectura": "Costo de Rectoría: servicios académicos en USD por $1.878 M POR VALIDAR, viajes y seguro. Además, $860 M del Gerente comercial, que la v14 pasó a 4.4 Ventas y el equipo deja aquí. La nómina es la del plan, con incremento desde abril."
+  },
+  {
+   "clave": "RO",
+   "equipo": 1271726462,
+   "lectura": ""
+  },
+  {
+   "clave": "OTROS_INGRESOS",
+   "equipo": 3676463455,
+   "lectura": "Los dos incluyen la participación ESIC de $1.500 M; la diferencia es menor."
+  },
+  {
+   "clave": "BANCARIOS",
+   "equipo": 1130548779,
+   "lectura": ""
+  },
+  {
+   "clave": "DA",
+   "equipo": 2399849628,
+   "lectura": ""
+  },
+  {
+   "clave": "OTROS_GASTOS",
+   "equipo": 1560464176,
+   "lectura": ""
+  },
+  {
+   "clave": "RN",
+   "equipo": -142672666,
+   "lectura": "El equipo cierra con déficit; el modelo con excedente. Ver sección D: sin las partidas por validar, el equipo pasaría a excedente."
+  }
+ ],
+ "unidades": [
+  {
+   "unidad": "PRE",
+   "equipo": 33895964916,
+   "lectura": "v12: el modelo adopta la proyección de antiguos del equipo (16.405 matrículas frente a 17.557 en 2026, −6,6% por graduación y deserción; Supuestos 2.4). La diferencia baja de $2.292 M a $921 M. Lo que queda: base 2026 (el modelo parte de $33.148 M contables; el equipo de $31.392 M en matrículas más pecuniarios), la meta adicional de $431 M del equipo y el precio por matrícula (+7,3% en el equipo frente a 6,3%). Ni el modelo ni el equipo separan virtual y presencial: ambos llevan la mezcla 2026."
+  },
+  {
+   "unidad": "POS",
+   "equipo": 6287136865,
+   "lectura": "El equipo usa cohortes y cuotas con 408 nuevos en Sabaneta (+6,5% de ingreso frente a 2026). El modelo usa la meta del Power BI (465 nuevos, +21% en volumen) sobre un 2026E de $6.637 M. Hay que alinear la meta de nuevos de especializaciones entre el equipo comercial y finanzas."
+  },
+  {
+   "unidad": "MAE",
+   "equipo": 1455062488,
+   "lectura": "Mismo cálculo por cohortes: $1.455 M (cohorte 2027 pago I, cohorte 2026 pagos II y III y amortizaciones). El equipo lo toma como ingreso neto; el modelo lo trata como ingreso bruto y descuenta el 32,7% de becas y descuentos de 2026 ($979 M neto). Validar con Financiera si los valores por pago ya vienen netos de descuentos."
+  },
+  {
+   "unidad": "PLUS",
+   "equipo": 3455792928,
+   "lectura": "Diferencia menor; el modelo usa una variación porcentual."
+  },
+  {
+   "unidad": "EXT",
+   "equipo": 695022208,
+   "lectura": "El equipo proyecta $695 M; el modelo $931 M (2026E con IPC)."
+  },
+  {
+   "unidad": "URE",
+   "equipo": 8127899265,
+   "lectura": "El equipo suma técnicos empresas ($1.505 M amortizados), licitaciones ($2.000 M), consultorías ($2.000 M) y proyectos que vienen de 2026 ($2.623 M): $8.128 M en Sabaneta. El modelo usa la meta de $5.000 M de ingreso bruto fijada por la Rectoría. Hay que decidir cuál cifra adoptar; el costo de proyectos y la nómina de la URE del equipo dependen de la cifra alta."
+  },
+  {
+   "unidad": "BAQ",
+   "equipo": 7476868091,
+   "lectura": "v16: el modelo usa la retención histórica de Barranquilla (85,7%: 2.324 antiguos en 2026 sobre 2.711 estudiantes en 2025), 288 nuevos reales en 2026 (confirmado por el rector) y aplica el volumen de estudiantes solo al pregrado (68% del ingreso de la sede). El modelo queda en $6.629 M (+6,8% sobre 2026E) y el equipo en $7.477 M, $848 M más. El equipo supone 2.497 antiguos (retiene el 95,6%) y 444 nuevos de pregrado, frente a 296 en la meta del modelo."
+  }
+ ],
+ "partidas": [
+  {
+   "codigo": "CP201",
+   "rubro": "Actualización Materiales",
+   "equipo": 97451800,
+   "modelo": 45206469.939,
+   "explicacion": "El equipo presupuesta desarrollo de material por $97 M (la versión inicial pedía $191 M). El modelo ajusta el 2026E por IPC ($45 M)."
+  },
+  {
+   "codigo": "CP203",
+   "rubro": "Docentes de Catedra Maestría",
+   "equipo": 488656223,
+   "modelo": 384607412.54596,
+   "explicacion": "Cátedra de maestrías: el equipo la calcula con las cohortes vigentes; el modelo escala la cátedra 2026 con el factor de volumen de las cohortes (1,29 en el Moderado), con el mismo número de estudiantes que el equipo."
+  },
+  {
+   "codigo": "CP205",
+   "rubro": "Docentes de Catedra Posgrado",
+   "equipo": 1896000000,
+   "modelo": 1990339276.27511,
+   "explicacion": "Cátedra de especializaciones: el equipo bajó de $2.846 M (inicial) a $1.896 M; el modelo escala con el volumen (+19%)."
+  },
+  {
+   "codigo": "CP207",
+   "rubro": "Docentes Ocasionales Pregrado Barranquilla",
+   "equipo": 250725919,
+   "modelo": 430565349.910359,
+   "explicacion": "El modelo costea los 61 grupos de Barranquilla de la programación 2027 (Docencia2027). El equipo deja $251 M de docentes ocasionales. Hay que validar la contratación de los grupos de Barranquilla."
+  },
+  {
+   "codigo": "CP208",
+   "rubro": "Docentes Ocasionales Pregrado Sabaneta",
+   "equipo": 2751760000,
+   "modelo": 2591893353.92931,
+   "explicacion": "Modalidad distinta. El equipo pasa la docencia de pregrado Sabaneta a término fijo: 440 grupos por $2.752 M, más 309 grupos con TC. El modelo usa cátedra de núcleos específicos más mentores Vértice ($2.600 M). El equipo no incluye mentores."
+  },
+  {
+   "codigo": "CP212",
+   "rubro": "Docentes Tiempo Completo Pregrado",
+   "equipo": 6958152777,
+   "modelo": 6867434985.1741,
+   "explicacion": "La nómina parte del plan por persona del equipo; el modelo aplica el incremento desde el 1 de abril (enero–marzo con salario 2026), el equipo lo aplica todo el año. El resto es costo de proceso."
+  },
+  {
+   "codigo": "CP214",
+   "rubro": "Extensión",
+   "equipo": 667221319,
+   "modelo": 749019593.764,
+   "explicacion": "El modelo hace el costo de extensión proporcional a su ingreso; el equipo lo fija en $667 M."
+  },
+  {
+   "codigo": "CP215",
+   "rubro": "Isolution",
+   "equipo": 3863949633,
+   "modelo": 2701216155.28402,
+   "explicacion": "Costo directo de proyectos URE ligado al ingreso. El equipo proyecta ventas de $9.086 M; el modelo usa la meta de $5.000 M."
+  },
+  {
+   "codigo": "CP401",
+   "rubro": "Acreditación y Registro Calificado",
+   "equipo": 844289778,
+   "modelo": 641770638.7918,
+   "explicacion": "El equipo incluye Registro MEN ($100 M), acreditaciones internacionales (AACSB, EFMD) y apropiación del PDI: $394 M de costo, frente a $198 M en el modelo."
+  },
+  {
+   "codigo": "CP402",
+   "rubro": "Administración Escuela",
+   "equipo": 434657985,
+   "modelo": 365195192.7683,
+   "explicacion": "Costos de administración de escuela: el equipo $369 M; el modelo $300 M (2026E con IPC)."
+  },
+  {
+   "codigo": "CP405",
+   "rubro": "Asesores Estudiantes",
+   "equipo": 1092383325,
+   "modelo": 1048726717.9512,
+   "explicacion": "La nómina parte del plan por persona del equipo; el modelo aplica el incremento desde el 1 de abril (enero–marzo con salario 2026), el equipo lo aplica todo el año. El resto es costo de proceso."
+  },
+  {
+   "codigo": "CP406",
+   "rubro": "Barranquilla",
+   "equipo": 3685811700,
+   "modelo": 3280417159.6167,
+   "explicacion": "Barranquilla: el equipo presupuesta arriendo de sede por $1.080 M y FCF por $586 M ($2.555 M de costo); el modelo $2.206 M (2026E con IPC). Además, la v14 pasó a ventas un asesor de admisión de Barranquilla ($45 M) que el equipo deja aquí."
+  },
+  {
+   "codigo": "CP414",
+   "rubro": "ESIC",
+   "equipo": 371000000,
+   "modelo": 0,
+   "explicacion": "El equipo mantiene $371 M de costo ESIC. Con la terminación del convenio de docencia, el modelo no lo presupuesta; la relación con ESIC queda como participación del 15% en otros ingresos. Retirar o soportar."
+  },
+  {
+   "codigo": "CP415",
+   "rubro": "Gestión de la Calidad",
+   "equipo": 525783186,
+   "modelo": 355752540.9552,
+   "explicacion": "El equipo incluye proyectos del sistema de gestión (punto ecológico, acompañamiento de visión, ISO 14001/27001) por $214 M; el modelo $47 M."
+  },
+  {
+   "codigo": "CP417",
+   "rubro": "Internacionalización",
+   "equipo": 314130737,
+   "modelo": 442600340.6968,
+   "explicacion": "El equipo ajusta internacionalización a $314 M; el modelo arrastra el real 2026 con IPC."
+  },
+  {
+   "codigo": "CP418",
+   "rubro": "Investigación",
+   "equipo": 1091033827,
+   "modelo": 1828012513.5733,
+   "explicacion": "El equipo topea investigación en $1.091 M: matriz de productividad $450 M, proyectos $216 M y costos $179 M. El modelo arrastra el real 2026 (costos $929 M y matriz $657 M) más la nómina del plan."
+  },
+  {
+   "codigo": "CP420",
+   "rubro": "Posgrado - Especializaciones",
+   "equipo": 122593431,
+   "modelo": 70080817.696,
+   "explicacion": "El equipo incluye costos de administración de especializaciones por encima del 2026."
+  },
+  {
+   "codigo": "CP423",
+   "rubro": "Registro y Control",
+   "equipo": 544325143,
+   "modelo": 466107405.5707,
+   "explicacion": "El equipo sube el costo de registro y control a $250 M; el modelo $176 M."
+  },
+  {
+   "codigo": "CP424",
+   "rubro": "Seguridad y Salud en el Trabajo",
+   "equipo": 127898998,
+   "modelo": 86693268.2892,
+   "explicacion": "Costos de seguridad y salud en el trabajo por encima del 2026."
+  },
+  {
+   "codigo": "CP425",
+   "rubro": "Vicerrectoría Académica",
+   "equipo": 610705455,
+   "modelo": 566109449.1927,
+   "explicacion": "La nómina parte del plan por persona del equipo; el modelo aplica el incremento desde el 1 de abril (enero–marzo con salario 2026), el equipo lo aplica todo el año. El resto es costo de proceso."
+  },
+  {
+   "codigo": "CP301",
+   "rubro": "Gastos de Venta y Publicidad",
+   "equipo": 7716014148,
+   "modelo": 9383703932.40152,
+   "explicacion": "El modelo incluye $1.132 M de nómina comercial reclasificada en la v14 (Gerente comercial, Director de admisiones y un asesor de admisión de Barranquilla) que el equipo tiene en otros procesos. La nómina es la del plan, con incremento desde abril. El resto de la diferencia está en publicidad: el modelo la escala con los estudiantes nuevos de la meta; el equipo la fija en $3.414 M (≈7% de ingresos)."
+  },
+  {
+   "codigo": "CP602",
+   "rubro": "Infraestructura Tecnológica",
+   "equipo": 1522062521,
+   "modelo": 1331289876.5216,
+   "explicacion": "Infraestructura tecnológica: el equipo presupuesta $969 M de costo; el modelo $892 M. La nómina es la del plan, con el incremento desde abril."
+  },
+  {
+   "codigo": "CP702",
+   "rubro": "Gestión Administrativa",
+   "equipo": 1769202540,
+   "modelo": 1537563807.8132,
+   "explicacion": "El equipo presupuesta $1.769 M de costo. Incluye estudios de familiares ($400 M), arriendo en España para legalizar anticipos de familia ($180 M) y cobertura de anticipos ($170 M). Ver observaciones de gobierno. El modelo arrastra el real 2026 ($1.450 M de costo con IPC), que también incluye capacitación en Stanford y USC, seguros y licencias Westfield."
+  },
+  {
+   "codigo": "CP801",
+   "rubro": "Contratación y Nomina",
+   "equipo": 932981291,
+   "modelo": 711158237.5543,
+   "explicacion": "La nómina es la del plan, con el incremento desde abril. El equipo incluye BUK ($66 M), eventos, dotación, bonos y quinquenios: $315 M de costo, frente a $78 M en el modelo."
+  },
+  {
+   "codigo": "CP802",
+   "rubro": "Financiera y Tributaria",
+   "equipo": 2342206791,
+   "modelo": 2748014647.3692,
+   "explicacion": "La nómina es la del plan (los dos cargos trasladados a Rectoría están incluidos), con el incremento desde abril. El equipo baja los costos de financiera y tributaria a $468 M; el modelo $910 M (2026E con IPC)."
+  },
+  {
+   "codigo": "CP803",
+   "rubro": "Mantenimiento y Servicios Generales",
+   "equipo": 957776361,
+   "modelo": 838454526.1186,
+   "explicacion": "El equipo sube el costo de mantenimiento y servicios generales a $713 M; el modelo $596 M."
+  },
+  {
+   "codigo": "CP901",
+   "rubro": "Cintana",
+   "equipo": 720000000,
+   "modelo": 800000000,
+   "explicacion": "CINTANA: el equipo usa una TRM de $3.600 y el modelo de $4.000 sobre USD 200.000."
+  },
+  {
+   "codigo": "CP903",
+   "rubro": "Rectoría",
+   "equipo": 6341600485,
+   "modelo": 3358829125.4478,
+   "explicacion": "La nómina es la del plan, con el incremento desde abril; desde la v14 el Gerente comercial ($860 M) va en 4.4 Ventas, mientras el equipo lo deja en Rectoría. En costos, el equipo tiene $3.285 M y el modelo $1.229 M: el equipo incluye \"Academic services USD\" por $1.878 M marcado POR VALIDAR, viajes ($173 M) y un seguro personal ($36 M). Ver observaciones de gobierno."
+  },
+  {
+   "codigo": "CP1001",
+   "rubro": "Otros Ingresos",
+   "equipo": 3676463455,
+   "modelo": 3541494426.439,
+   "explicacion": "Los dos incluyen la participación ESIC de $1.500 M (15% de las ventas de pregrado de ESIC, parámetro en Supuestos 4C). El resto son rendimientos y otros ingresos."
+  },
+  {
+   "codigo": "CP1102",
+   "rubro": "Impuestos Asumidos y Otros",
+   "equipo": 386371825,
+   "modelo": 590214473.889377,
+   "explicacion": "El modelo hace los impuestos asumidos proporcionales al ingreso; el equipo los fija en $386 M."
+  },
+  {
+   "codigo": "CP1301",
+   "rubro": "Costos y Gastos Ejercicios Anteriores",
+   "equipo": 70000000,
+   "modelo": 0,
+   "explicacion": "El modelo no presupuesta costos de ejercicios anteriores; el equipo deja $70 M."
+  },
+  {
+   "codigo": "CP1302",
+   "rubro": "Gastos Diversos",
+   "equipo": 1490464176,
+   "modelo": 1145396223.33,
+   "explicacion": "El equipo toma como base el dato a julio de 2026, que incluye diferencia en cambio. El modelo ajusta el 2026E."
+  }
+ ],
+ "observaciones": [
+  {
+   "titulo": "Ingresos brutos y descuentos",
+   "texto": "El equipo no separa ingresos brutos y descuentos para 2027: solo presenta ingreso neto. Pedir el detalle de descuentos, que en 2026 fueron 25% del bruto."
+  },
+  {
+   "titulo": "1. Rectoría – \"Academic services USD\"",
+   "texto": "El equipo presupuesta $1.878 M de servicios académicos en dólares a dos personas vinculadas a la dirección. El propio equipo lo marca \"POR VALIDAR\"."
+  },
+  {
+   "titulo": "2. Gestión administrativa – gastos de familia",
+   "texto": "Incluye estudios de familiares ($400 M), arriendo en España para legalizar anticipos de familia ($180 M) y cobertura de anticipos ($170 M): $750 M."
+  },
+  {
+   "titulo": "3. Nómina de dirección",
+   "texto": "Tres cargos de dirección con salario de $48,1 M/mes y costo anual de $880 M cada uno. Dos de ellos se trasladan del centro de costos Financiera a Rectoría (\"Nómina dirección\", $1.761 M). Debe constar la aprobación del Consejo Directivo, el soporte de funciones y la referencia de mercado. El modelo los incluye porque usa el plan de nómina del equipo. Desde la v14, uno de ellos (Gerente comercial) va en 4.4 Ventas."
+  },
+  {
+   "titulo": "4. Partidas similares en la base real 2026",
+   "texto": "El auxiliar ene–sep 2026, base del modelo, registra pagos a Westfield USA LLC (≈$423 M), capacitación en Stanford y USC (≈$575 M), UKIO Spain ($135 M) y procesamiento de datos pagado a personas naturales (≈$103 M). El modelo los proyecta con IPC porque parte del real; deben revisarse igual que las del equipo."
+  },
+  {
+   "titulo": "Por qué importa",
+   "texto": "CEIPA es una ESAL del Régimen Tributario Especial (Título VI, Libro I del Estatuto Tributario; Decreto 2150 de 2017). Los pagos a fundadores, directivos o sus parientes deben estar aprobados, a valores de mercado y soportados por la actividad meritoria. Los gastos personales o familiares pueden considerarse distribución indirecta de excedentes, con riesgo para la permanencia en el régimen y frente a la inspección del MEN (Ley 1740 de 2014)."
+  },
+  {
+   "titulo": "Recomendación",
+   "texto": "Separar estas partidas en un anexo, someterlas al Consejo Directivo con concepto de revisoría fiscal y asesoría tributaria, y presupuestar solo lo aprobado y soportado. Si se excluyen las partidas por validar del equipo (1 y 2, $2.628 M), su resultado pasa de déficit a excedente."
+  },
+  {
+   "titulo": "Resultado del equipo sin las partidas 1 y 2",
+   "texto": "$2.485 M (frente a un déficit de $143 M)."
+  }
+ ],
+ "conclusiones": [
+  "1. Mismo punto de partida, distinta construcción. El modelo ya incorpora la nómina por persona del equipo y la participación ESIC; las diferencias que quedan son de ingresos y de costos de procesos.",
+  "2. El déficit del equipo (−$143 M) frente al excedente del modelo ($1.364 M, v16) es una brecha de $1.507 M. La explican el costo de dirección institucional (+$2.938 M, casi todo servicios académicos en USD por validar; incluye $860 M del Gerente comercial, que el modelo pasó a ventas en v14), prestación de servicios (+$1.192 M, costo de la mayor venta URE), administración académica (+$773 M, incluye ESIC $371 M), otros gastos (+$415 M), unidades de negocio (+$234 M, incluye $226 M del Director de admisiones), corporativo (+$222 M) y tecnología (+$173 M). La compensan en parte el mayor ingreso del equipo (+$2.407 M, de los cuales $848 M en Barranquilla), ventas (−$1.668 M, de los cuales $1.132 M son la reclasificación v14), gastos bancarios (−$146 M) y otros ingresos (+$135 M).",
+  "3. Lo que conviene tomar del equipo: maestrías por cohortes (ingreso y cátedra) y el detalle de procesos, que permite control presupuestal. Ya incorporados: nómina por persona y participación ESIC.",
+  "4. Lo que conviene corregir en el presupuesto del equipo: retirar el costo ESIC ($371 M); alinear la URE con la meta aprobada o soportar los $9.086 M con contratos; incluir mentores si se aplica Vértice; presentar ingresos brutos y descuentos por separado.",
+  "5. Antes de aprobar: resolver las observaciones de la sección D. Al incorporar el plan de nómina, el modelo también incluye la nómina de dirección señalada en el punto 3 de esa sección.",
+  "6. Clasificación de la nómina (v14): el modelo organiza la nómina por rubro del estado de resultados y pasa a 4.4 Ventas tres cargos comerciales ($1.132 M) que el equipo deja en dirección institucional ($860 M), unidades de negocio ($226 M) y administración académica ($45 M). En las secciones A y C esto aparece como diferencia entre rubros, pero no cambia el costo total ni el resultado. Conviene que el equipo adopte la misma clasificación."
+ ]
+}

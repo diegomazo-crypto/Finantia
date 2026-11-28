@@ -10,17 +10,17 @@
     "resumen": "node herramientas/resumen.js",
     "inicializar": "node herramientas/inicializar.js",
     "iniciar": "node servidor/web/iniciar.js",
-    "demo": "FINANTIA_DEMO=1 node servidor/web/iniciar.js"
+    "demo": "FINANTIA_DEMO=1 node servidor/web/iniciar.js",
+    "pruebas-servidor": "FINANTIA_MODO_PRUEBAS=1 node servidor/web/iniciar.js"
   },
   "engines": {
     "node": ">=20"
   },
-  "devDependencies": {
-    "@electric-sql/pglite": "0.3.15"
-  },
   "dependencies": {
     "@anthropic-ai/sdk": "1.8.0",
+    "@electric-sql/pglite": "0.3.15",
     "jose": "5.9.6",
+    "pdfjs-dist": "4.10.38",
     "pg": "8.16.3"
   }
 }

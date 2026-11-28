@@ -10,10 +10,12 @@ export const ROLES = { VISUALIZACION: 'Visualización', ADMINISTRACION: 'Adminis
 export const ACCIONES = {
   INGRESO: 'Ingresó', CREAR_USUARIO: 'Creó un usuario', ACTIVAR_USUARIO: 'Activó un usuario', DESACTIVAR_USUARIO: 'Desactivó un usuario', CAMBIAR_ACTIVO: 'Cambió el estado de un usuario',
   ASIGNAR_ACCESO: 'Asignó un acceso', QUITAR_ACCESO: 'Quitó un acceso', CONFIGURAR_APROBACION: 'Configuró la aprobación',
-  CARGAR_DATOS_BASE: 'Cargó datos base', CREAR_EJERCICIO: 'Abrió un ejercicio', CREAR_VERSION: 'Creó la versión', EDITAR_SUPUESTOS: 'Editó supuestos',
+  CARGAR_DATOS_BASE: 'Cargó datos base', CREAR_EJERCICIO: 'Abrió un ejercicio', CREAR_VERSION: 'Creó la versión', EDITAR_SUPUESTOS: 'Editó supuestos', EDITAR_SUPUESTOS_PLANEACION: 'Editó supuestos de planeación', CREAR_CUENTA_BANCO: 'Registró una cuenta bancaria', EDITAR_CUENTA_BANCO: 'Editó una cuenta bancaria', SUBIR_EXTRACTO: 'Cargó un extracto', BORRAR_EXTRACTO: 'Borró un extracto', EDITAR_AJUSTES_CAJA: 'Editó los ajustes de caja', EDITAR_TASAS_CAMBIO: 'Editó las tasas de cambio',
   ENVIAR_REVISION: 'Envió a revisión', APROBAR: 'Aprobó', DEVOLVER: 'Devolvió', VERSION_APROBADA: 'La versión quedó aprobada', REEMPLAZAR: 'Quedó reemplazada', CAMBIAR_SUPERUSUARIO: 'Cambió superusuario', INICIALIZAR: 'Inicializó Finantia',
   SUBIR_ARCHIVO: 'Subió un archivo', RETIRAR_ARCHIVO: 'Retiró un archivo', PREGUNTAR: 'Preguntó al asistente',
-  SUBIR_NOMINA: 'Cargó la nómina por cargo', VER_NOMINA: 'Consultó la nómina por cargo', RETIRAR_NOMINA: 'Retiró la nómina por cargo', CARGAR_EVALUACION: 'Cargó la evaluación del equipo'
+  SUBIR_NOMINA: 'Cargó la nómina por cargo', VER_NOMINA: 'Consultó la nómina por cargo', RETIRAR_NOMINA: 'Retiró la nómina por cargo', CARGAR_EVALUACION: 'Cargó la evaluación del equipo',
+  GENERAR_CLAVE_PRUEBAS: 'Generó una clave del sitio de pruebas', QUITAR_CLAVE_PRUEBAS: 'Quitó una clave del sitio de pruebas',
+  SUBIR_BALANCE: 'Subió un balance de prueba', BORRAR_BALANCE: 'Quitó un balance de prueba', SUBIR_BASE_EJECUCION: 'Cargó la base de ejecución', BORRAR_BASE_EJECUCION: 'Quitó la base de ejecución', BORRAR_VERSION: 'Borró una versión'
 };
 
 /* ---------- formatos ---------- */
@@ -74,3 +76,14 @@ export const nfMil = new Intl.NumberFormat('es-CO', { maximumFractionDigits: 0 }
 /** Pone el ancho (y la posición) de las barras después de pintar: la CSP no permite estilos en línea en el HTML. */
 export function anchos(raiz) { raiz.querySelectorAll('[data-w]').forEach(el => { el.style.width = el.dataset.w + '%'; el.style.left = (el.dataset.l || 0) + '%'; }); }
 
+
+/* Estructura del estado de resultados (misma de Finantia 1.0) */
+export const EERR = [
+  ['IB', 'Ingreso bruto', 'sub'], ['DS', 'Descuentos y becas', 'det', -1], ['NET', 'Ingreso neto', 'sub'],
+  ['PRESTACION', 'Costo de prestación', 'det'], ['ADM_ACADEMICA', 'Administración académica', 'det'], ['UNIDADES', 'Unidades de negocio', 'det'], ['VENTAS', 'Ventas y mercadeo', 'det'],
+  ['CD', 'Costos directos', 'sub'], ['MB', 'Margen bruto', 'sub'],
+  ['TECNOLOGIA', 'Tecnología', 'det'], ['CORPORATIVO', 'Corporativo', 'det'], ['ADMINISTRATIVOS', 'Administrativos', 'det'], ['DIRECCION', 'Dirección', 'det'],
+  ['GO', 'Gastos de operación', 'sub'], ['RO', 'Resultado operacional', 'sub'],
+  ['OTROS_INGRESOS', 'Otros ingresos', 'det'], ['BANCARIOS', 'Gastos bancarios', 'det', -1], ['DA', 'Depreciación y amortización', 'det', -1], ['OTROS_GASTOS', 'Otros gastos', 'det', -1],
+  ['RN', 'Resultado neto', 'total'], ['EBITDA', 'EBITDA', 'sub']
+];

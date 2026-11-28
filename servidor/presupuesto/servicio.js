@@ -12,7 +12,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { crearModelo, DEFAULTS, ESCS, FIXED, lineasMensuales } from '../../motor/index.js';
-import { exigir } from '../admin/permisos.js';
+import { exigir, veDetalleSensible } from '../admin/permisos.js';
 import { registrar } from '../admin/bitacora.js';
 import { falla, DATOS_INVALIDOS, NO_ENCONTRADO, ESTADO_INVALIDO, NO_AUTORIZADO } from '../errores.js';
 
@@ -83,6 +83,7 @@ export function validarSupuestos(s) {
       for (const e of Object.keys(s.params)) {
         if (!ESCS.includes(e)) err(`escenario desconocido ${e}`);
         forma(s.params[e], { ...DEFAULTS[e], tope: {} }, `params.${e}`);
+        if (s.params[e].trm && s.params[e].trm.some(x => x < 500 || x > 50000)) err(`params.${e}.trm: la TRM va en pesos por dólar (entre 500 y 50.000)`);
       }
     } else if (k === 'metas') {
       for (const [mk, mv] of Object.entries(s.metas)) {
@@ -120,9 +121,22 @@ function resumenEscenario(x) {
   };
 }
 
-async function modeloDe(t, version) {
+/**
+ * Datos base cargados antes de que existiera el reparto de nómina por unidad (REP, Nomina_Asignacion):
+ * se completa con el de datos/base2026.json de la instalación si la estructura de líneas coincide.
+ */
+async function completarDatos(datos) {
+  if (datos.REP) return datos;
+  try {
+    const f = JSON.parse((await import('node:fs')).readFileSync(new URL('../../datos/base2026.json', import.meta.url)));
+    if (f.REP && f.LP?.length === datos.LP?.length) return { ...datos, REP: f.REP };
+  } catch { /* sin archivo: se deja como está */ }
+  return datos;
+}
+
+export async function modeloDe(t, version) {
   const base = (await t.query('SELECT contenido FROM datos_base WHERE id = $1', [version.datos_base_id])).rows[0];
-  const datos = typeof base.contenido === 'string' ? JSON.parse(base.contenido) : base.contenido;
+  const datos = await completarDatos(typeof base.contenido === 'string' ? JSON.parse(base.contenido) : base.contenido);
   return { datos, modelo: crearModelo(datos, version.supuestos || {}) };
 }
 
@@ -200,6 +214,32 @@ export async function editarSupuestos(db, actor, versionId, cambios) {
   });
 }
 
+/** Versión y sus datos base (para quien calcula algo sobre ella). */
+export async function datosDeVersion(db, versionId) {
+  const version = await leerVersion(db, versionId);
+  const { datos } = await modeloDe(db, version);
+  return { version, datos };
+}
+
+/**
+ * Fija (o quita, con null) la nómina por línea y unidad que sale del plan por persona.
+ * La llama el servicio de nómina, que ya revisó el permiso de detalle sensible. En la bitácora
+ * quedan el modo, los totales de personas por proceso y el costo total: no hay datos de personas.
+ */
+export async function fijarNominaVersion(db, actor, versionId, valor) {
+  exigir(actor, M, 'editar');
+  return db.tx(async t => {
+    const v = await leerVersion(t, versionId, true);
+    if (v.estado !== 'BORRADOR') falla(ESTADO_INVALIDO, `La versión está ${v.estado}; solo se editan borradores`);
+    const { LP: _lp, nominaPlan: antes, ...resto } = v.supuestos || {};
+    const nuevo = valor ? { ...resto, LP: valor.LP, nominaPlan: valor.nominaPlan } : resto;
+    await t.query('UPDATE version SET supuestos = $2 WHERE id = $1', [v.id, JSON.stringify(nuevo)]);
+    await recalcular(t, { ...v, supuestos: nuevo });
+    await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'NOMINA_VERSION', entidad: 'version', entidadId: v.id, antes: antes ?? null, despues: valor ? valor.nominaPlan : null });
+    return valor ? valor.nominaPlan : null;
+  });
+}
+
 export async function enviarARevision(db, actor, versionId) {
   exigir(actor, M, 'editar');
   return db.tx(async t => {
@@ -269,6 +309,30 @@ export async function devolver(db, actor, versionId, observaciones) {
 
 /* ---------- consultas ---------- */
 
+/**
+ * Borra una versión. Un borrador lo borra quien edita el presupuesto; una versión en revisión o
+ * reemplazada, solo el Superusuario. La aprobada no se borra nunca: es la que se ejecuta y se audita.
+ * Se borran sus resultados, decisiones, líneas y preguntas; en la bitácora queda una copia
+ * (nombre, estado, supuestos y resumen de los tres escenarios) para poder reconstruirla.
+ */
+export async function borrarVersion(db, actor, versionId) {
+  exigir(actor, M, 'editar');
+  return db.tx(async t => {
+    const v = await leerVersion(t, versionId, true);
+    if (v.estado === 'APROBADA') falla(ESTADO_INVALIDO, 'La versión aprobada no se puede borrar: es la que se ejecuta. Apruebe otra versión primero; la actual pasará a reemplazada.');
+    if (v.estado !== 'BORRADOR' && !actor.es_superusuario) falla(NO_AUTORIZADO, `Solo el Superusuario borra una versión ${v.estado === 'EN_REVISION' ? 'en revisión' : 'reemplazada'}`);
+    const resumen = Object.fromEntries((await t.query('SELECT escenario, resumen FROM resultado WHERE version_id = $1', [v.id])).rows
+      .map(r => { const x = typeof r.resumen === 'string' ? JSON.parse(r.resumen) : r.resumen; return [r.escenario, x.tot ? { NET: x.tot.NET, EBITDA: x.tot.EBITDA, RN: x.tot.RN } : null]; }));
+    await t.query('UPDATE version SET copia_de = NULL WHERE copia_de = $1', [v.id]);
+    await t.query('UPDATE version SET reemplazada_por = NULL WHERE reemplazada_por = $1', [v.id]);
+    for (const tabla of ['pregunta', 'linea_presupuestal', 'decision_aprobacion', 'resultado']) await t.query(`DELETE FROM ${tabla} WHERE version_id = $1`, [v.id]);
+    await t.query('DELETE FROM version WHERE id = $1', [v.id]);
+    await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'BORRAR_VERSION', entidad: 'version', entidadId: v.id,
+      antes: { ejercicio: v.ejercicio, numero: v.numero, nombre: v.nombre, estado: v.estado, datosBaseId: v.datos_base_id, supuestos: v.supuestos, resumen } });
+    return { borrada: v.id };
+  });
+}
+
 export async function listarVersiones(db, actor, ejercicio) {
   exigir(actor, M, 'ver');
   return (await db.query('SELECT id, numero, nombre, estado, escenario_oficial, ronda, creada_en, enviada_en, aprobada_en, reemplazada_por FROM version WHERE ejercicio = $1 ORDER BY numero', [ejercicio])).rows
@@ -311,7 +375,14 @@ export async function contenidoDatosBase(db, actor, id) {
   exigir(actor, M, 'ver');
   const r = (await db.query('SELECT contenido FROM datos_base WHERE id = $1', [id])).rows[0];
   if (!r) falla(NO_ENCONTRADO, `No existen los datos base ${id}`);
-  return typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido;
+  return sinAuxiliar(await completarDatos(typeof r.contenido === 'string' ? JSON.parse(r.contenido) : r.contenido), actor);
+}
+
+/** El reparto por centro de costos y cuenta (auxiliar contable) solo va a quien ve el detalle sensible. */
+export function sinAuxiliar(datos, actor) {
+  if (veDetalleSensible(actor, M)) return datos;
+  const { DD, CCN, CTN, ...resto } = datos;
+  return resto;
 }
 
 const cacheBase = new Map();

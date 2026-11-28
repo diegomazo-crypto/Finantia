@@ -9,7 +9,13 @@ import { PGlite } from '@electric-sql/pglite';
 import { desdePGlite, migrar } from '../servidor/db/conexion.js';
 import { crearServidor } from '../servidor/web/servidor.js';
 import { sembrarDemo } from '../servidor/web/demo.js';
-import { crearNomina, interpretarNomina, numero, leerCsv } from '../servidor/presupuesto/nomina.js';
+import { crearNomina, interpretarNomina, numero, leerCsv, contenidoDeArchivo, avisosCarga } from '../servidor/presupuesto/nomina.js';
+import { readFileSync } from 'node:fs';
+import { inflateRawSync } from 'node:zlib';
+import { leerXlsx } from '../servidor/presupuesto/xlsx.js';
+import { libroXlsx } from '../web/xlsx.js';
+import { clase, costoAnual, planNomina, smmlv2027, SMMLV_2026 } from '../motor/nomina.js';
+import { interpretarPersonas } from '../servidor/presupuesto/nomina.js';
 import { validarEvaluacion } from '../servidor/presupuesto/evaluacion.js';
 
 const U = { su: 'superusuario@demo.finantia', adm: 'administracion@demo.finantia', apr: 'aprobacion@demo.finantia', con: 'consulta@demo.finantia' };
@@ -32,7 +38,10 @@ async function pedir(b, metodo, ruta, { como, cuerpo, crudo, nombre } = {}) {
   return { status: r.status, datos: await r.json().catch(() => null) };
 }
 const ok = async (p, status = 200) => { const r = await p; assert.equal(r.status, status, JSON.stringify(r.datos)); return r.datos; };
-const subir = (como, texto, nombre = 'nomina.csv', b = base) => pedir(b, 'POST', '/api/presupuesto/ejercicios/2027/nomina', { como, crudo: Buffer.from(texto, 'utf8'), nombre });
+const subir = (como, texto, nombre = 'nomina.csv', b = base) => pedir(b, 'POST', '/api/presupuesto/ejercicios/2027/nomina', { como, crudo: Buffer.isBuffer(texto) ? texto : Buffer.from(texto, 'utf8'), nombre });
+const XLSX = readFileSync(new URL('./referencias/nomina_ejemplo.xlsx', import.meta.url));
+const inflar = (d, max) => inflateRawSync(d, { maxOutputLength: max });
+const aXlsx = async filas => Buffer.from(await libroXlsx(filas).arrayBuffer());
 
 before(async () => {
   db = desdePGlite(new PGlite());
@@ -70,11 +79,14 @@ describe('Lectura del archivo de nómina', () => {
     assert.equal(f[0].costoAnual, 1500000000.5);
   });
 
-  test('rechaza nombres o documentos de personas, rubros desconocidos y columnas faltantes', () => {
-    assert.throws(() => interpretarNomina('rubro;proceso;cargo;Nombre;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;Pérez;1;0;0;1;1'), /quite nombres, documentos y correos/);
-    assert.throws(() => interpretarNomina('rubro;proceso;cargo;cédula;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;1;1;0;0;1;1'), /quite nombres/);
+  test('acepta nombre y cédula de cada persona e ignora correos; rechaza rubros desconocidos y columnas faltantes', () => {
+    const [f] = interpretarNomina('rubro;proceso;cargo;Cédula;Nombres;Apellidos;Correo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;1.017.123.456;Ana María;Pérez Gómez;ana@x.co;1;0;0;1;1');
+    assert.equal(f.cedula, '1017123456');
+    assert.equal(f.nombre, 'Ana María Pérez Gómez');
+    assert.ok(!JSON.stringify(f).includes('ana@x.co'), 'el correo no se guarda');
+    assert.throws(() => interpretarNomina('rubro;proceso;cargo;cedula;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;<script>;1;0;0;1;1'), /cédula inválida/);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n5.1;A;B;1;0;0;1;1'), /Fila 2: rubro "5.1" desconocido/);
-    assert.throws(() => interpretarNomina('rubro;proceso;cargo\n4.1;A;B'), /Faltan columnas: continuan/);
+    assert.throws(() => interpretarNomina('rubro;proceso;cargo\n4.1;A;B'), /No se reconoce el formato del archivo. Columnas encontradas: rubro, proceso, cargo.*Item informe.*por cargo faltan: continuan/s);
     assert.throws(() => interpretarNomina('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;-1;0;0;1;1'), /Fila 2: valor inválido en continuan/);
   });
 });
@@ -116,17 +128,17 @@ describe('Nómina por cargo por la API', () => {
     assert.ok(!JSON.stringify(v).includes('Cargo de dirección'), 'la nómina por cargo no entra en la versión (ni al asistente)');
   });
 
-  test('con otra llave no se puede leer', async () => {
+  test('con otra llave no se puede leer, pero se informa y se puede reemplazar', async () => {
     const r = await pedir(baseOtra, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm });
-    assert.equal(r.status, 503);
+    assert.equal(r.status, 200);
     assert.match(r.datos.error, /descifrar/);
+    assert.ok(r.datos.carga.id && !r.datos.filas.length, 'muestra la carga vigente sin su contenido');
   });
 
-  test('rechaza otro formato, columnas de personas y archivos que no son UTF-8', async () => {
-    assert.equal((await subir(U.adm, CSV, 'nomina.xlsx')).status, 422);
-    const p = await subir(U.adm, 'rubro;proceso;cargo;nombres;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;A;B;X;1;0;0;1;1');
-    assert.equal(p.status, 422);
-    assert.match(p.datos.error, /quite nombres/);
+  test('rechaza otro formato y archivos que no son UTF-8', async () => {
+    assert.equal((await subir(U.adm, CSV, 'nomina.xlsx')).status, 422, 'un CSV con extensión .xlsx');
+    assert.equal((await subir(U.adm, XLSX, 'nomina.csv')).status, 422, 'un Excel con extensión .csv');
+    assert.equal((await subir(U.adm, CSV, 'nomina.pdf')).status, 422);
     const latin1 = await pedir(base, 'POST', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm, crudo: Buffer.from('rubro;proceso;cargo;continuan;nuevos;vacantes;salario_2027;costo_anual\n4.1;Dirección;B;1;0;0;1;1', 'latin1'), nombre: 'n.csv' });
     assert.equal(latin1.status, 422);
     assert.match(latin1.datos.error, /UTF-8/);
@@ -166,7 +178,9 @@ describe('Evaluación del presupuesto del equipo', () => {
   });
 
   test('solo existe para 2027 y solo con el detalle sensible', async () => {
-    assert.deepEqual(await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.adm })), { evaluacion: null });
+    // Viene cargada desde la instalación (datos/evaluacion2027.json): nadie tiene que volver a subirla
+    const inicial = (await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.adm }))).evaluacion;
+    assert.ok(inicial.rubros.length > 10 && inicial.unidades.length && inicial.partidas.length && inicial.conclusiones.length);
     assert.equal((await pedir(base, 'GET', '/api/presupuesto/ejercicios/2028/evaluacion', { como: U.adm })).status, 404);
     assert.equal((await pedir(base, 'PUT', '/api/presupuesto/ejercicios/2028/evaluacion', { como: U.adm, cuerpo: EV })).status, 404);
     assert.equal((await pedir(base, 'PUT', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.con, cuerpo: EV })).status, 403);
@@ -179,6 +193,174 @@ describe('Evaluación del presupuesto del equipo', () => {
     await ok(pedir(base, 'PUT', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.adm, cuerpo: { ...EV, conclusiones: ['Otra.'] } }));
     assert.deepEqual((await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/evaluacion', { como: U.su }))).evaluacion.conclusiones, ['Otra.']);
     const bit = (await db.query("SELECT count(*)::int AS n FROM bitacora WHERE accion = 'CARGAR_EVALUACION'")).rows[0].n;
-    assert.equal(bit, 2);
+    assert.equal(bit, 3);
+  });
+});
+
+describe('Nómina en Excel (.xlsx)', () => {
+  test('lee la primera hoja de un libro hecho en Excel: números, textos y encabezados con tildes', async () => {
+    const filas = interpretarNomina(await leerXlsx(XLSX, inflar));
+    assert.equal(filas.length, 4, 'la fila vacía se omite y la segunda hoja no se lee');
+    assert.deepEqual(filas[0], { rubro: 'PRESTACION', proceso: 'Docentes Pregrado', cargo: 'Profesor tiempo completo', continuan: 10, nuevos: 1, vacantes: 0, salario2026: 8000000, salario2027: 8480000, costoAnual: 1500000000.5 });
+    assert.equal(filas[2].costoAnual, 700000000, 'cifras escritas como texto con puntos de miles');
+    assert.equal(filas[3].cargo, 'Analista "senior" <2>');
+    assert.equal(filas[3].proceso, 'Financiera & tributaria');
+    assert.equal(filas[3].continuan, 2.5);
+  });
+
+  test('da lo mismo subir el CSV o el Excel', async () => {
+    const csv = interpretarNomina(CSV), xl = interpretarNomina(await leerXlsx(XLSX, inflar));
+    assert.deepEqual(xl.map(f => f.costoAnual), csv.map(f => f.costoAnual));
+  });
+
+  test('la plantilla que se descarga se puede volver a subir', async () => {
+    const f = interpretarNomina(await leerXlsx(await aXlsx([['rubro', 'proceso', 'cargo', 'continuan', 'nuevos', 'vacantes', 'salario_2026', 'salario_2027', 'costo_anual'], ['4.1', 'Docentes', 'Profesor', 20, 2, 1, 9000000, 9540000, 3200000000]]), inflar));
+    assert.equal(f[0].costoAnual, 3200000000);
+  });
+
+  test('acepta nombre y cédula; rechaza fórmulas sin valor y archivos que no son Excel', async () => {
+    const [p] = interpretarNomina(await leerXlsx(await aXlsx([['rubro', 'proceso', 'cargo', 'Cédula', 'Nombre', 'continuan', 'nuevos', 'vacantes', 'salario_2027', 'costo_anual'], ['4.1', 'A', 'B', 71234567, 'Juan Ejemplo', 1, 0, 0, 1, 1]]), inflar));
+    assert.deepEqual([p.cedula, p.nombre], ['71234567', 'Juan Ejemplo'], 'la cédula numérica de Excel se lee sin decimales');
+    await assert.rejects(async () => interpretarNomina(await leerXlsx(readFileSync(new URL('./referencias/nomina_formula_sin_valor.xlsx', import.meta.url)), inflar)), /fórmula sin valor/);
+    await assert.rejects(leerXlsx(Buffer.from('no soy un zip'), inflar), /no es un .xlsx/);
+    await assert.rejects(leerXlsx(XLSX.subarray(0, 1000), inflar), /no se pudo leer/);
+  });
+
+  test('se sube por la API, se cifra y se lee igual que el CSV', async () => {
+    const { id } = await ok(subir(U.adm, XLSX, 'Nómina 2027.xlsx'));
+    const v = await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm }));
+    assert.equal(v.carga.id, id);
+    assert.equal(v.carga.nombre, 'Nómina 2027.xlsx');
+    assert.equal(v.filas.length, 4);
+    const r = (await db.query('SELECT cifrado FROM nomina_carga WHERE id = $1', [id])).rows[0];
+    assert.ok(!Buffer.from(r.cifrado).toString('latin1').includes('Profesor'));
+  });
+
+  test('nombre y cédula quedan cifrados: no aparecen en la base sin descifrar ni en la bitácora', async () => {
+    const libro = await aXlsx([['rubro', 'proceso', 'cargo', 'cedula', 'nombre', 'continuan', 'nuevos', 'vacantes', 'salario_2027', 'costo_anual'], ['6.3', 'Contabilidad', 'Analista', 98765432, 'Persona De Prueba', 1, 0, 0, 3000000, 45000000]]);
+    const { id } = await ok(subir(U.adm, libro, 'nomina_personas.xlsx'));
+    const v = await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm }));
+    assert.deepEqual([v.filas[0].cedula, v.filas[0].nombre], ['98765432', 'Persona De Prueba']);
+    assert.equal((await pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.con })).status, 403);
+    const todo = JSON.stringify((await db.query('SELECT * FROM nomina_carga WHERE id = $1', [id])).rows) + JSON.stringify((await db.query('SELECT * FROM bitacora')).rows);
+    assert.ok(!todo.includes('98765432') && !todo.includes('Persona De Prueba'));
+  });
+});
+
+/* Plan por persona como la hoja Nomina2027 (cifras inventadas). Fila modelo 8 = línea 3 (docentes TC); 100 = línea 95. */
+const ENC_PERSONAS = ['Cédula', 'Nombre', 'Centro de costos', 'Área', 'Proceso (ítem informe)', 'Nodo', 'Salario mensual 2026', 'Salario mensual 2027', 'Incremento', 'Incremento regla', 'Dif. vs regla', 'Factor prestac.', 'Costo anual 2027', 'Fila modelo', 'Unidad modelo', 'Bolsa (costo sin salario)', 'Factor personas', 'Costo ajustado 2027', 'Cargo (BDD)', 'Valores adicionales (BDD)', 'Peso persona'];
+const persona = (ced, nom, area, proc, s26, s27, fila, uni, { bolsa = '', factor = 1, cargo = 'Profesional' } = {}) => [ced, nom, 'CC', area, proc, 'Sabaneta', s26, s27, '', '', '', factor, '', fila, uni, bolsa, '', '', cargo, '', 1];
+const PLAN = [
+  ['NÓMINA 2027 POR PERSONA (prueba)'], ['Resumen'], ['Área', 'Proceso', 'Continúan'],
+  ENC_PERSONAS,
+  persona('1001', 'Persona Uno', 'Costos de Prestación del Servicio', 'Docentes TC', 3000000, 3200000, 8, 'PRE'),
+  persona('1002', 'Persona Dos', 'Costos de Prestación del Servicio', 'Docentes TC', '', 2000000, 8, 'PRE'),
+  persona('', '', 'Costos de Prestación del Servicio', 'Docentes TC', '', 0, 8, 'PRE'),
+  persona('1004', 'Persona Cuatro', 'Administrativos', 'Financiera', 25000000, 24000000, 100, 'REPARTO', { factor: 1.5 }),
+  persona('', '', 'Ventas', 'Comercial', '', 0, 100, 'REPARTO', { bolsa: 5000000 }),
+  ['Personas en la BDD que no están en el plan (1)'], ['Cédula', 'Nombre'], ['9999', 'Otra Persona']
+];
+
+describe('Plan de nómina por persona (como el Excel v21)', () => {
+  const sm27 = smmlv2027(0.095), d = JSON.parse(readFileSync(new URL('../datos/base2026.json', import.meta.url)));
+
+  test('clase y costo anual con la regla del Excel', () => {
+    const c = (s26, s27, o = {}) => costoAnual({ s26, s27, factor: 1, ...o }, { sm27 });
+    assert.equal(c(3000000, 3200000), 3000000 * 3 + 3200000 * 9, 'incremento desde abril');
+    assert.equal(c(SMMLV_2026, 1917241), 1917241 * 12, 'quien gana menos del SMMLV 2027 lo recibe desde enero');
+    assert.equal(c(25000000, 24000000), 13 * sm27 * 12, 'salario integral: al menos 13 SMMLV 2027 todo el año');
+    assert.equal(c(null, 2000000), 24000000, 'cargo nuevo: el salario 2027 todo el año');
+    assert.equal(c(3000000, 3200000, { factor: 0 }), 0, 'factor prestacional 0: sin costo, como en el Excel');
+    assert.equal(c(null, 0, { bolsa: 5000000 }), 5000000);
+    assert.deepEqual([clase({ s26: 1, s27: 1 }), clase({ s26: null, s27: 1 }), clase({ s27: 0 }), clase({ s27: 0, bolsa: 9 })], ['Continúa', 'Nuevo', 'Vacante', 'Bolsa']);
+  });
+
+  test('lee el plan desde su encabezado, se detiene en las notas y reparte por línea y unidad', async () => {
+    const P = interpretarPersonas(await leerXlsx(await aXlsx(PLAN), inflar), d.LP.length);
+    assert.equal(P.length, 5, 'la tabla de personas fuera del plan no se lee');
+    assert.deepEqual([P[0].cedula, P[0].nombre, P[0].rubro, P[1].s26, P[3].rubro], ['1001', 'Persona Uno', 'PRESTACION', null, 'ADMINISTRATIVOS']);
+    const r = planNomina(P, { REP: d.REP, nLineas: d.LP.length, sm27 });
+    assert.deepEqual(r.personas.map(p => p.clase), ['Continúa', 'Nuevo', 'Vacante', 'Continúa', 'Bolsa']);
+    const doc = r.procesos.find(g => g.proceso === 'Docentes TC');
+    assert.deepEqual([doc.cont, doc.nuevos, doc.vac, doc.personas, doc.factor], [1, 1, 1, 3, 1]);
+    assert.equal(r.LP[3][0], 37800000 + 24000000, 'unidad fija: todo a pregrado');
+    const fin = 13 * sm27 * 12 * 1.5 + 5000000;
+    d.REP[95].forEach((s, j) => assert.ok(Math.abs(r.LP[95][j] - fin * s) < 1e-3, 'REPARTO con la participación 2026 de la línea'));
+    assert.ok(Math.abs(r.total - (61800000 + fin)) < 1e-3);
+  });
+
+  test('cargos a costear y personas por proceso, como en Finantia Admon 1.0', async () => {
+    const P = interpretarPersonas(await leerXlsx(await aXlsx(PLAN), inflar), d.LP.length);
+    const op = { REP: d.REP, nLineas: d.LP.length, sm27 };
+    const doc = modo => planNomina(P, { ...op, modo }).procesos.find(g => g.proceso === 'Docentes TC');
+    assert.equal(doc('ambos').factor, 1.5, 'la vacante se costea al promedio del proceso');
+    assert.equal(doc('cont').factor, 0.5, 'sin vacantes ni nuevos');
+    assert.equal(doc('vac').factor, 1);
+    const mas = planNomina(P, { ...op, personasPorProceso: { 'Docentes TC': 4 } }).procesos.find(g => g.proceso === 'Docentes TC');
+    assert.equal(mas.factor, 1.5, '4 personas − 1 vacante excluida = 3 sobre 2 con salario');
+  });
+
+  test('se sube por la API, se aplica a la versión y la versión se recalcula; quitarlo la devuelve a los datos base', async () => {
+    await ok(subir(U.adm, await aXlsx(PLAN), 'plan_personas.xlsx'));
+    const n = await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/nomina', { como: U.adm }));
+    assert.equal(n.carga.formato, 'personas');
+    assert.equal(n.personas.length, 5);
+    const vid = (await ok(pedir(base, 'GET', '/api/presupuesto/ejercicios/2027/versiones', { como: U.adm })))[0].id;
+    const antes = await ok(pedir(base, 'GET', `/api/presupuesto/versiones/${vid}`, { como: U.adm }));
+    assert.equal((await pedir(base, 'POST', `/api/presupuesto/versiones/${vid}/nomina`, { como: U.apr, cuerpo: { modo: 'plan' } })).status, 403, 'sin detalle sensible no se aplica');
+    assert.equal((await pedir(base, 'POST', `/api/presupuesto/versiones/${vid}/nomina`, { como: U.adm, cuerpo: { modo: 'otro' } })).status, 422);
+    assert.equal((await pedir(base, 'POST', `/api/presupuesto/versiones/${vid}/nomina`, { como: U.adm, cuerpo: { modo: 'plan', personas: { 'No existe': 2 } } })).status, 422);
+    const np = await ok(pedir(base, 'POST', `/api/presupuesto/versiones/${vid}/nomina`, { como: U.adm, cuerpo: { modo: 'ambos', personas: { 'Docentes TC': 3 } } }));
+    assert.equal(np.modo, 'ambos');
+    const desp = await ok(pedir(base, 'GET', `/api/presupuesto/versiones/${vid}`, { como: U.con }));
+    assert.ok(Math.abs(desp.resultados.Moderado.tot.N - np.total) < 1, 'la nómina del modelo es la del plan aplicado');
+    assert.ok(desp.supuestos.LP && desp.supuestos.nominaPlan.total === np.total);
+    assert.ok(!JSON.stringify(desp).includes('Persona Uno') && !JSON.stringify(desp).includes('1001'), 'la versión no lleva datos de personas');
+    const bit = JSON.stringify((await db.query("SELECT * FROM bitacora WHERE accion = 'NOMINA_VERSION'")).rows);
+    assert.ok(bit.includes('ambos') && !bit.includes('Persona Uno'));
+    await ok(pedir(base, 'POST', `/api/presupuesto/versiones/${vid}/nomina`, { como: U.adm, cuerpo: { modo: null } }));
+    const vuelta = await ok(pedir(base, 'GET', `/api/presupuesto/versiones/${vid}`, { como: U.adm }));
+    assert.equal(vuelta.resultados.Moderado.tot.RN, antes.resultados.Moderado.tot.RN);
+    assert.ok(!vuelta.supuestos.LP && !vuelta.supuestos.nominaPlan);
+  });
+});
+
+describe('plan del equipo + base de nómina (datos inventados)', () => {
+  const mapa = JSON.parse(readFileSync(new URL('../datos/nomina_mapa.json', import.meta.url)));
+  const op = { mapa, nLineas: 117 };
+  const plan = leerCsv([
+    'Cedula;Nombre colaborador;Centro de costos; SALARIO 2027 ; SALARIO ORDINARIO 2027 ; Costo anual ; Area ;Item informe;Nodo',
+    '111;PERSONA UNO;FINANCIERA;10.000.000;10.000.000;180.000.000;Administrativos;Financiera y Tributaria;Sabaneta',
+    '222;PERSONA DOS;DOCENTES TIEM COMPLETO PREGR;5000000;5000000;45000000;Costos de Prestación del Servicio;Docentes Tiempo Completo Pregrado;Sabaneta',
+    '222;PERSONA DOS;MAESTRIAS PRESENCIAL;5000000;5000000;45000000;Costos de Prestación del Servicio;Posgrado - Maestría;Sabaneta',
+    ';PLAZA NUEVA;COMERCIAL BQLLA;2000000;2000000;36000000;Ventas;Gastos de Venta y Publicidad;Barranquilla',
+    ';COMISIONES;COMERCIAL SABANETA;0;0;50000000;Ventas;Gastos de Venta y Publicidad;Sabaneta',
+    ';VACANTE;INVESTIGACIONES;0;0;0;Administración Académica;Investigación;Sabaneta',
+    ';OCASIONALES;DOCENTES OCASIONALES;0;0;90000000;Costos de Prestación del Servicio;Docentes Ocasionales Pregrado Sabaneta;Sabaneta',
+    ';AJUSTE;FINANCIERA;0;0;-28567444;Administrativos;Financiera y Tributaria;Sabaneta',
+    ';;;;;311000000;;;'
+  ].join('\n'));
+  const bdd = leerCsv('DOCUMENTO;NOMBRE;CECO;CARGO; VALORES ADICIONALES ; SALARIO ;CIA\n111;PERSONA UNO;X;ANALISTA FINANCIERO;0;9000000;CEIPA\n222;PERSONA DOS;Y;DOCENTE;0;4800000;CEIPA');
+
+  test('se cruzan por cédula en cualquier orden', () => {
+    const solo = contenidoDeArchivo(plan, null, op);
+    assert.equal(solo.personas.length, 6);
+    assert.ok(avisosCarga(solo).some(a => /Falta la base de nómina/.test(a)));
+    const c = contenidoDeArchivo(bdd, solo, op), d = contenidoDeArchivo(plan, contenidoDeArchivo(bdd, null, op), op);
+    assert.deepEqual(c.personas, d.personas);
+    const [uno, dosA, dosB, nuevo, bolsa, vac] = c.personas;
+    assert.equal(uno.s26, 9000000); assert.equal(uno.cargo, 'Analista financiero'); assert.equal(uno.factor, 1.5);
+    assert.equal(uno.unidad, 'REPARTO'); assert.equal(uno.rubro, 'ADMINISTRATIVOS'); assert.equal(uno.cedula, '111');
+    assert.equal(dosA.peso, 0.5); assert.equal(dosB.peso, 0.5); assert.equal(dosA.unidad, 'PRE'); assert.equal(dosB.unidad, 'MAE');
+    assert.equal(nuevo.s26, null); assert.equal(nuevo.unidad, 'BAQ');
+    assert.equal(bolsa.bolsa, 50000000); assert.equal(vac.bolsa, null); assert.equal(vac.s27, 0);
+    assert.equal(avisosCarga(c).length, 2);
+    assert.match(avisosCarga(c)[1], /1 fila con costo negativo \(ajustes: Financiera y Tributaria; −\$29 M\)/);
+    assert.match(avisosCarga(c)[0], /No entran al plan 1 fila de docentes ocasionales y de cátedra \(Docentes Ocasionales Pregrado Sabaneta; \$90 M/);
+  });
+  test('ítem desconocido y archivo sin formato', () => {
+    const malo = leerCsv('Cedula;Nombre colaborador;SALARIO 2027;Costo anual;Area;Item informe;Nodo\n1;A;1;12;Ventas;Inventado;Sabaneta');
+    assert.throws(() => contenidoDeArchivo(malo, null, op), /Ítems informe que no están en la asignación del modelo: "Inventado" \(fila 2\)/);
+    assert.match(avisosCarga(contenidoDeArchivo(bdd, null, op))[0], /Base de nómina cargada \(2 personas\)/);
   });
 });

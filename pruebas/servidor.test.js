@@ -22,7 +22,7 @@ const actor = id => cargarActor(db, id);
 
 before(async () => {
   db = process.env.FINANTIA_PRUEBA_PG_URL ? await conectar(process.env.FINANTIA_PRUEBA_PG_URL) : desdePGlite(new PGlite());
-  assert.deepEqual(await migrar(db), ['001_administracion.sql', '002_presupuesto.sql', '003_archivos_preguntas.sql', '004_nomina_evaluacion.sql']);
+  assert.deepEqual(await migrar(db), ['001_administracion.sql', '002_presupuesto.sql', '003_archivos_preguntas.sql', '004_nomina_evaluacion.sql', '005_ejecucion.sql', '006_claves_pruebas.sql', '007_planeacion.sql', '008_bancos_caja.sql', '009_preguntas_modulos.sql', '010_moneda_cuentas.sql']);
   assert.deepEqual(await migrar(db), [], 'migrar dos veces no repite nada');
   ids.su = await A.inicializarSuperusuario(db, { correo: 'Superusuario@ceipa.edu.co', nombre: 'Superusuario' }, DOM);
   su = await actor(ids.su);
@@ -55,7 +55,7 @@ describe('Administración: usuarios y accesos', () => {
     await rechaza(A.asignarAcceso(db, su, ids.vis, 'PRESUPUESTO', 'JEFE'), 'DATOS_INVALIDOS');
     const lista = await A.listarUsuarios(db, su);
     assert.equal(lista.length, 5);
-    assert.deepEqual(lista.find(u => u.id === ids.adm).accesos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', detalle_sensible: true }]);
+    assert.deepEqual(lista.find(u => u.id === ids.adm).accesos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', detalle_sensible: true, preguntas: false }]);
   });
 
   test('matriz de permisos', async () => {
@@ -188,6 +188,21 @@ describe('Presupuesto: versión, supuestos y aprobación', () => {
     const vs = await P.listarVersiones(db, vis, 2027);
     assert.deepEqual(vs.map(x => x.estado), ['REEMPLAZADA', 'REEMPLAZADA', 'APROBADA']);
     await A.configurarAprobacion(db, su, 'PRESUPUESTO', { aprobacionesRequeridas: 1 });
+  });
+
+  test('borrar versiones: borrador quien edita, reemplazada solo el Superusuario, la aprobada nunca', async () => {
+    const [r1, , ap] = await P.listarVersiones(db, vis, 2027);
+    const v4 = await P.crearVersion(db, adm, { ejercicio: 2027, nombre: 'Prueba para borrar', copiaDe: ap.id });
+    await rechaza(P.borrarVersion(db, vis, v4), 'NO_AUTORIZADO');
+    assert.deepEqual(await P.borrarVersion(db, adm, v4), { borrada: v4 });
+    await rechaza(P.obtenerVersion(db, adm, v4), 'NO_ENCONTRADO');
+    await rechaza(P.borrarVersion(db, adm, r1.id), 'NO_AUTORIZADO');
+    await rechaza(P.borrarVersion(db, su, ap.id), 'ESTADO_INVALIDO');
+    await P.borrarVersion(db, su, r1.id);
+    assert.deepEqual((await P.listarVersiones(db, vis, 2027)).map(x => x.estado), ['REEMPLAZADA', 'APROBADA']);
+    const b = (await db.query(`SELECT antes FROM bitacora WHERE accion = 'BORRAR_VERSION' ORDER BY id DESC LIMIT 1`)).rows[0].antes;
+    const antes = typeof b === 'string' ? JSON.parse(b) : b;
+    assert.equal(antes.estado, 'REEMPLAZADA'); assert.ok(antes.resumen.Moderado.RN, 'guarda el resumen para reconstruirla');
   });
 
   test('quitar el rol Aprobación lo saca del orden de aprobadores', async () => {

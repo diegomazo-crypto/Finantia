@@ -8,6 +8,7 @@ import { extname, normalize, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ErrorFinantia } from '../errores.js';
 import { configurarAutenticacion, identificar } from './autenticacion.js';
+import { ingresarPruebas, sesionDe, cookieSesion, cookieBorrar, cerrarSesion, esHttps } from './pruebas.js';
 import { rutasApi } from './api.js';
 import { crearAsistente } from '../presupuesto/asistente.js';
 import { crearNomina } from '../presupuesto/nomina.js';
@@ -17,8 +18,13 @@ const MOTOR = fileURLToPath(new URL('../../motor/', import.meta.url)); /* el nav
 const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon', '.json': 'application/json' };
 const HTTP = { SIN_SESION: 401, NO_AUTORIZADO: 403, NO_ENCONTRADO: 404, ESTADO_INVALIDO: 409, DATOS_INVALIDOS: 422, NO_DISPONIBLE: 503 };
 
-function cabecerasSeguridad(res) {
+function cabecerasSeguridad(req, res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive'); /* fuera de los buscadores */
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+  if (esHttps(req)) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Content-Security-Policy', [
@@ -57,7 +63,7 @@ async function estatico(req, res) {
   if (!archivo.startsWith(raiz)) return json(res, 404, { error: 'No encontrado' });
   try {
     const cuerpo = await readFile(archivo);
-    res.writeHead(200, { 'Content-Type': TIPOS[extname(archivo)] || 'application/octet-stream', 'Cache-Control': ruta === '/index.html' ? 'no-cache' : 'public, max-age=300' });
+    res.writeHead(200, { 'Content-Type': TIPOS[extname(archivo)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
     res.end(cuerpo);
   } catch { json(res, 404, { error: 'No encontrado' }); }
 }
@@ -69,8 +75,36 @@ async function estatico(req, res) {
 export function crearServidor(db, { auth = configurarAutenticacion(), asistente = crearAsistente(), nomina = crearNomina() } = {}) {
   const rutas = rutasApi(db, auth, asistente, nomina);
   return createServer(async (req, res) => {
-    cabecerasSeguridad(res);
+    cabecerasSeguridad(req, res);
     const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/robots.txt') { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); return res.end('User-agent: *\nDisallow: /\n'); }
+    if (auth.modo === 'pruebas') {
+      const p = auth.pruebas;
+      if (url.pathname === '/api/pruebas/ingreso' && req.method === 'POST') {
+        if (req.headers['x-finantia'] !== '1') return json(res, 403, { error: 'Falta la cabecera X-Finantia', codigo: 'NO_AUTORIZADO' });
+        try {
+          const { token } = await ingresarPruebas(db, p, req, await leerCuerpo(req, 4096));
+          res.setHeader('Set-Cookie', cookieSesion(req, token));
+          return json(res, 200, { ok: true });
+        } catch (e) {
+          if (e instanceof ErrorFinantia) return json(res, e.codigo === 'NO_AUTORIZADO' ? 401 : HTTP[e.codigo] || 400, { error: e.message, codigo: e.codigo });
+          console.error(e); return json(res, 500, { error: 'Error interno' });
+        }
+      }
+      if (url.pathname === '/api/pruebas/salir' && req.method === 'POST') {
+        cerrarSesion(p, req); res.setHeader('Set-Cookie', cookieBorrar(req)); return json(res, 200, { ok: true });
+      }
+      /* Sin sesión: solo la página de ingreso y lo que ella usa */
+      if (!url.pathname.startsWith('/api/') && !sesionDe(p, req)) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Método no permitido' });
+        if (['/estilos.css', '/ingreso-pruebas.js', '/marca/finantia.png'].includes(url.pathname)) return estatico(req, res);
+        try {
+          const html = await readFile(join(WEB, 'ingreso-pruebas.html'));
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          return res.end(html);
+        } catch { return json(res, 500, { error: 'Error interno' }); }
+      }
+    }
     if (!url.pathname.startsWith('/api/')) {
       if (req.method !== 'GET' && req.method !== 'HEAD') return json(res, 405, { error: 'Método no permitido' });
       return estatico(req, res);

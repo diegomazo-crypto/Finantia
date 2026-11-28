@@ -25,7 +25,7 @@ export async function cargarActor(db, usuarioId) {
   const u = (await db.query('SELECT id, correo, nombre, activo, es_superusuario FROM usuario WHERE id = $1', [usuarioId])).rows[0];
   if (!u) falla(NO_AUTORIZADO, 'Usuario no registrado en Finantia');
   const accesos = {};
-  for (const a of (await db.query('SELECT modulo, rol, detalle_sensible FROM acceso WHERE usuario_id = $1', [usuarioId])).rows) accesos[a.modulo] = a;
+  for (const a of (await db.query('SELECT modulo, rol, detalle_sensible, preguntas FROM acceso WHERE usuario_id = $1', [usuarioId])).rows) accesos[a.modulo] = a;
   const modulosActivos = new Set((await db.query('SELECT codigo FROM modulo WHERE activo')).rows.map(r => r.codigo));
   return { ...u, id: Number(u.id), accesos, modulosActivos };
 }
@@ -45,6 +45,15 @@ export function puede(actor, modulo, accion) {
 export function veDetalleSensible(actor, modulo) {
   if (!actor || !actor.activo) return false;
   return actor.es_superusuario || !!(actor.accesos[modulo] && actor.accesos[modulo].detalle_sensible);
+}
+
+/**
+ * ¿Puede usar la pestaña Preguntas (el asistente) del módulo? Además de ver el módulo, necesita el
+ * permiso de Preguntas que se asigna en Administración; el Superusuario lo tiene siempre.
+ */
+export function puedePreguntar(actor, modulo) {
+  if (!puede(actor, modulo, 'ver')) return false;
+  return actor.es_superusuario || !!actor.accesos[modulo]?.preguntas;
 }
 
 export function exigir(actor, modulo, accion) {
