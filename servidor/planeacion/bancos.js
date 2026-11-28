@@ -16,15 +16,17 @@ import { celdasDe, baseDelAnio } from '../ejecucion/servicio.js';
 import { porRubro } from '../../motor/ejecucion.js';
 import { proyectarCaja } from '../../motor/planeacion.js';
 import { leerExtracto } from './extractos.js';
+import { leerResumenPdf } from './extractosPdf.js';
+import { lineasPdf } from './pdf.js';
 import { versionPorDefecto, supuestosGuardados } from './servicio.js';
 
 const M = 'PLANEACION';
 export const TAMANO_MAXIMO = 10 * 1024 * 1024;
-const TIPOS = ['AHORROS', 'CORRIENTE', 'FIDUCIA', 'INVERSION', 'OTRA'], DESTINOS = ['LIBRE', 'ESPECIFICA'];
+const TIPOS = ['AHORROS', 'CORRIENTE', 'FIDUCIA', 'INVERSION', 'OTRA'], DESTINOS = ['LIBRE', 'ESPECIFICA'], MONEDAS = ['COP', 'USD', 'EUR'];
 const num = x => (x == null ? null : Number(x));
 const anioValido = a => { if (!Number.isInteger(a) || a < 2020 || a > 2100) falla(DATOS_INVALIDOS, 'Año inválido'); return a; };
 const mesValido = m => { if (!Number.isInteger(m) || m < 1 || m > 12) falla(DATOS_INVALIDOS, 'Mes inválido'); return m; };
-const fila = r => ({ id: Number(r.id), banco: r.banco, tipo: r.tipo, terminacion: r.terminacion, nombre: r.nombre, destinacion: r.destinacion, detalle: r.detalle, activa: r.activa });
+const fila = r => ({ id: Number(r.id), banco: r.banco, tipo: r.tipo, terminacion: r.terminacion, nombre: r.nombre, destinacion: r.destinacion, detalle: r.detalle, activa: r.activa, moneda: r.moneda || 'COP', porConfirmar: !!r.por_confirmar });
 
 /* ---------- cuentas (Administración) ---------- */
 export async function listarCuentas(db, actor) {
@@ -36,20 +38,21 @@ function limpiarCuenta(c) {
   const t = (v, n, nombre, req = false) => { const s = String(v ?? '').trim().slice(0, n); if (req && !s) falla(DATOS_INVALIDOS, `Falta ${nombre}`); return s; };
   const terminacion = String(c.terminacion ?? '').replace(/\D/g, '');
   if (terminacion.length > 4) falla(DATOS_INVALIDOS, 'Escriba solo los últimos 4 dígitos de la cuenta');
-  const tipo = c.tipo || 'AHORROS', destinacion = c.destinacion || 'LIBRE';
+  const tipo = c.tipo || 'AHORROS', destinacion = c.destinacion || 'LIBRE', moneda = c.moneda || 'COP';
   if (!TIPOS.includes(tipo)) falla(DATOS_INVALIDOS, 'Tipo de cuenta inválido');
+  if (!MONEDAS.includes(moneda)) falla(DATOS_INVALIDOS, 'Moneda inválida');
   if (!DESTINOS.includes(destinacion)) falla(DATOS_INVALIDOS, 'Destinación inválida');
   const detalle = t(c.detalle, 300, 'el detalle');
   if (destinacion === 'ESPECIFICA' && !detalle) falla(DATOS_INVALIDOS, 'Indique para qué está destinada la cuenta');
-  return { banco: t(c.banco, 80, 'el banco', true), tipo, terminacion, nombre: t(c.nombre, 120, 'el nombre', true), destinacion, detalle, activa: c.activa !== false };
+  return { banco: t(c.banco, 80, 'el banco', true), tipo, terminacion, nombre: t(c.nombre, 120, 'el nombre', true), destinacion, detalle, activa: c.activa !== false, moneda, porConfirmar: c.porConfirmar === true };
 }
 
 export async function crearCuenta(db, actor, cuerpo) {
   exigir(actor, 'ADMINISTRACION', 'editar');
   const c = limpiarCuenta(cuerpo || {});
   return db.tx(async t => {
-    const id = Number((await t.query('INSERT INTO banco_cuenta (banco, tipo, terminacion, nombre, destinacion, detalle, activa, creada_por) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [c.banco, c.tipo, c.terminacion, c.nombre, c.destinacion, c.detalle, c.activa, actor.id])).rows[0].id);
+    const id = Number((await t.query('INSERT INTO banco_cuenta (banco, tipo, terminacion, nombre, destinacion, detalle, activa, moneda, por_confirmar, creada_por) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id',
+      [c.banco, c.tipo, c.terminacion, c.nombre, c.destinacion, c.detalle, c.activa, c.moneda, c.porConfirmar, actor.id])).rows[0].id);
     await registrar(t, { usuarioId: actor.id, modulo: 'ADMINISTRACION', accion: 'CREAR_CUENTA_BANCO', entidad: 'banco_cuenta', entidadId: id, despues: c });
     return { id, ...c };
   });
@@ -60,9 +63,10 @@ export async function editarCuenta(db, actor, id, cuerpo) {
   return db.tx(async t => {
     const antes = (await t.query('SELECT * FROM banco_cuenta WHERE id = $1', [id])).rows[0];
     if (!antes) falla(NO_ENCONTRADO, 'La cuenta no existe');
-    const c = limpiarCuenta({ ...fila(antes), ...(cuerpo || {}) });
-    await t.query('UPDATE banco_cuenta SET banco=$2, tipo=$3, terminacion=$4, nombre=$5, destinacion=$6, detalle=$7, activa=$8 WHERE id=$1',
-      [id, c.banco, c.tipo, c.terminacion, c.nombre, c.destinacion, c.detalle, c.activa]);
+    /* guardar desde Administración confirma la destinación de una cuenta creada al leer un extracto */
+    const c = limpiarCuenta({ ...fila(antes), ...(cuerpo || {}), porConfirmar: false });
+    await t.query('UPDATE banco_cuenta SET banco=$2, tipo=$3, terminacion=$4, nombre=$5, destinacion=$6, detalle=$7, activa=$8, moneda=$9, por_confirmar=false WHERE id=$1',
+      [id, c.banco, c.tipo, c.terminacion, c.nombre, c.destinacion, c.detalle, c.activa, c.moneda]);
     await registrar(t, { usuarioId: actor.id, modulo: 'ADMINISTRACION', accion: 'EDITAR_CUENTA_BANCO', entidad: 'banco_cuenta', entidadId: id, antes: fila(antes), despues: c });
     return { id, ...c };
   });
@@ -93,7 +97,11 @@ export async function subirExtracto(db, actor, cuentaId, anio, mes, { nombre, co
   exigir(actor, M, 'editar'); anioValido(anio); mesValido(mes);
   if (!contenido?.length) falla(DATOS_INVALIDOS, 'El archivo está vacío');
   const n = String(nombre || 'extracto').normalize('NFC').replace(/[\\/\x00-\x1f"<>|:*?]/g, '_').trim().slice(0, 180) || 'extracto';
-  if (/\.pdf$/i.test(n)) falla(DATOS_INVALIDOS, 'Los extractos en PDF no se leen todavía: descargue el Excel o CSV del portal del banco, o registre los saldos a mano');
+  if (/\.pdf$/i.test(n) || esPdf(contenido)) {
+    const r = leerResumenPdf(await lineasPdf(contenido));
+    if (r.anio !== anio || r.mes !== mes) falla(DATOS_INVALIDOS, `El extracto es de ${r.mes}/${r.anio}, no de ${mes}/${anio}`);
+    return guardar(db, actor, cuentaId, anio, mes, { saldoInicial: r.saldoInicial, entradas: r.entradas, salidas: r.salidas, saldoFinal: r.saldoFinal, movimientos: null }, n);
+  }
   const x = leerExtracto(await celdasDe(n, contenido), { anio, mes });
   if (x.saldoFinal == null) {
     const prev = (await db.query('SELECT saldo_final FROM extracto WHERE cuenta_id=$1 AND (anio*12+mes) = $2', [cuentaId, anio * 12 + mes - 1])).rows[0];
@@ -101,6 +109,55 @@ export async function subirExtracto(db, actor, cuentaId, anio, mes, { nombre, co
     x.saldoInicial = Number(prev.saldo_final); x.saldoFinal = x.saldoInicial + x.entradas - x.salidas;
   }
   return guardar(db, actor, cuentaId, anio, mes, x, n);
+}
+
+const esPdf = b => b?.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
+const familia = b => sinT(b).toLowerCase().replace(/\s+/g, ' ').trim();
+const sinT = s => String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/**
+ * Lee un extracto en PDF sin elegir cuenta ni mes: el banco, la cuenta y el mes salen del PDF.
+ * Si la cuenta no está registrada y quien sube puede administrar, se crea marcada "por confirmar"
+ * (destinación libre hasta que Administración la confirme).
+ */
+export async function subirExtractoPdf(db, actor, { nombre, contenido }) {
+  exigir(actor, M, 'editar');
+  if (!contenido?.length) falla(DATOS_INVALIDOS, 'El archivo está vacío');
+  const n = String(nombre || 'extracto.pdf').normalize('NFC').replace(/[\\/\x00-\x1f"<>|:*?]/g, '_').trim().slice(0, 180) || 'extracto.pdf';
+  if (!esPdf(contenido)) falla(DATOS_INVALIDOS, 'El archivo no es un PDF');
+  const r = leerResumenPdf(await lineasPdf(contenido));
+  const todas = (await db.query('SELECT * FROM banco_cuenta')).rows.map(fila);
+  let cta = todas.find(c => familia(c.banco) === familia(r.banco) && c.terminacion === r.terminacion)
+    || todas.find(c => c.terminacion === r.terminacion && c.moneda === r.moneda && familia(c.banco).split(' ')[0] === familia(r.banco).split(' ')[0]);
+  let creada = false;
+  if (!cta) {
+    if (!puede(actor, 'ADMINISTRACION', 'editar')) falla(DATOS_INVALIDOS, `La cuenta ${r.banco} terminada en ${r.terminacion} no está registrada: pídale a Administración que la cree`);
+    const nombreCta = r.fondo || `${r.tipo === 'AHORROS' ? 'Ahorros' : 'Corriente'}${r.moneda !== 'COP' ? ' ' + r.moneda : ''}`;
+    cta = await crearCuenta(db, actor, { banco: r.banco, nombre: nombreCta, tipo: r.tipo, terminacion: r.terminacion, moneda: r.moneda, destinacion: 'LIBRE', porConfirmar: true });
+    creada = true;
+  } else if (cta.moneda !== r.moneda) falla(DATOS_INVALIDOS, `El extracto está en ${r.moneda} y la cuenta ${cta.banco} ··${cta.terminacion} está registrada en ${cta.moneda}`);
+  const g = await guardar(db, actor, cta.id, r.anio, r.mes, { saldoInicial: r.saldoInicial, entradas: r.entradas, salidas: r.salidas, saldoFinal: r.saldoFinal, movimientos: null }, n);
+  return { ...g, creada, cuenta: { id: cta.id, banco: cta.banco, nombre: cta.nombre, terminacion: cta.terminacion, moneda: r.moneda } };
+}
+
+/* ---------- tasas de cambio de cierre de mes (pesos por USD o EUR) ---------- */
+export async function guardarTasas(db, actor, anio, cuerpo) {
+  exigir(actor, M, 'editar'); anioValido(anio);
+  const lista = (Array.isArray(cuerpo?.tasas) ? cuerpo.tasas : []).slice(0, 24).map(x => {
+    const mes = mesValido(Number(x.mes)), moneda = x.moneda, valor = x.valor === '' || x.valor == null ? null : Number(x.valor);
+    if (!['USD', 'EUR'].includes(moneda)) falla(DATOS_INVALIDOS, 'Moneda inválida');
+    if (valor != null && (!Number.isFinite(valor) || valor <= 0 || valor > 1e6)) falla(DATOS_INVALIDOS, 'Tasa de cambio inválida');
+    return { mes, moneda, valor };
+  });
+  await db.tx(async t => {
+    for (const x of lista) {
+      if (x.valor == null) await t.query('DELETE FROM tasa_cambio WHERE anio=$1 AND mes=$2 AND moneda=$3', [anio, x.mes, x.moneda]);
+      else await t.query(`INSERT INTO tasa_cambio (anio, mes, moneda, valor, actualizado_por) VALUES ($1,$2,$3,$4,$5)
+        ON CONFLICT (anio, mes, moneda) DO UPDATE SET valor=EXCLUDED.valor, actualizado_por=EXCLUDED.actualizado_por, actualizado_en=now()`, [anio, x.mes, x.moneda, x.valor, actor.id]);
+    }
+    await registrar(t, { usuarioId: actor.id, modulo: M, accion: 'EDITAR_TASAS_CAMBIO', entidad: 'tasa_cambio', entidadId: anio, despues: lista });
+  });
+  return { tasas: lista };
 }
 
 /** Registra a mano los saldos de un mes (para extractos en PDF o cuentas sin archivo). */
@@ -161,12 +218,26 @@ export async function cajaDelAnio(db, actor, anio) {
   const cuentas = (await db.query('SELECT * FROM banco_cuenta ORDER BY destinacion DESC, banco, nombre')).rows.map(fila);
   const extractos = (await db.query('SELECT e.*, u.nombre AS por FROM extracto e JOIN usuario u ON u.id = e.cargado_por WHERE e.anio = $1 ORDER BY e.mes', [anio])).rows
     .map(e => ({ cuentaId: Number(e.cuenta_id), mes: e.mes, saldoInicial: num(e.saldo_inicial), entradas: num(e.entradas), salidas: num(e.salidas), saldoFinal: num(e.saldo_final), origen: e.origen, movimientos: e.movimientos, cargadoPor: e.por, cargadoEn: e.cargado_en }));
+  /* moneda extranjera: el extracto se guarda en su moneda y se convierte con la tasa de cierre del mes */
+  const tasas = (await db.query('SELECT mes, moneda, valor FROM tasa_cambio WHERE anio = $1', [anio])).rows.map(t => ({ mes: t.mes, moneda: t.moneda, valor: num(t.valor) }));
+  const monedaDe = new Map(cuentas.map(c => [c.id, c.moneda])), sinTasa = [];
+  const extractosCop = extractos.flatMap(e => {
+    const mon = monedaDe.get(e.cuentaId);
+    if (!mon || mon === 'COP') return [{ ...e, tasa: null }];
+    const tx = tasas.find(t => t.mes === e.mes && t.moneda === mon);
+    if (!tx) { sinTasa.push({ mes: e.mes, moneda: mon }); return []; }
+    const k = tx.valor;
+    return [{ ...e, tasa: k, original: { saldoInicial: e.saldoInicial, entradas: e.entradas, salidas: e.salidas, saldoFinal: e.saldoFinal },
+      saldoInicial: e.saldoInicial * k, entradas: e.entradas * k, salidas: e.salidas * k, saldoFinal: e.saldoFinal * k }];
+  });
   const aj = (await db.query('SELECT contenido FROM caja_ajuste WHERE anio = $1', [anio])).rows[0];
   const ajustes = aj ? (typeof aj.contenido === 'string' ? JSON.parse(aj.contenido) : aj.contenido) : [];
   const { flujo, fuente, aproximado } = await flujoPresupuestado(db, anio);
   const cajaMinima = (await supuestosGuardados(db, anio)).sup.cajaMinima;
   const usadas = new Set(extractos.map(e => e.cuentaId));
   const visibles = cuentas.filter(c => c.activa || usadas.has(c.id));
-  return { anio, cuentas: visibles, extractos, ajustes, fuente, aproximado, cajaMinima, flujo,
-    caja: proyectarCaja({ cuentas: visibles, extractos, flujo, ajustes, cajaMinima }) };
+  const faltaTasa = [...new Map(sinTasa.map(x => [`${x.mes}-${x.moneda}`, x])).values()];
+  return { anio, cuentas: visibles, extractos: extractosCop, ajustes, fuente, aproximado, cajaMinima, flujo, tasas, faltaTasa,
+    monedas: [...new Set(visibles.map(c => c.moneda).filter(m => m !== 'COP'))],
+    caja: proyectarCaja({ cuentas: visibles, extractos: extractosCop, flujo, ajustes, cajaMinima }) };
 }

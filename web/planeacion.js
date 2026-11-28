@@ -239,7 +239,7 @@ export function vMensual(c, v, escenario) {
 /* ---------- Bancos y caja del año: extractos mensuales y proyección hasta diciembre ---------- */
 const MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const TIPOS_CTA = { AHORROS: 'Ahorros', CORRIENTE: 'Corriente', FIDUCIA: 'Fiducia / cartera colectiva', INVERSION: 'Inversión (CDT u otra)', OTRA: 'Otra' };
-const nomCuenta = c => `${esc(c.banco)} · ${esc(c.nombre)}${c.terminacion ? ' ··' + esc(c.terminacion) : ''}`;
+const nomCuenta = c => `${esc(c.banco)} · ${esc(c.nombre)}${c.terminacion ? ' ··' + esc(c.terminacion) : ''}${c.moneda && c.moneda !== 'COP' ? ' (' + c.moneda + ')' : ''}`;
 const enM = v => Math.round(Number(v || 0) / 1e6 * 100) / 100;
 
 export async function vCaja(c, { editar, anios }) {
@@ -250,7 +250,8 @@ export async function vCaja(c, { editar, anios }) {
   const k = d.caja, libres = d.cuentas.filter(x => x.destinacion === 'LIBRE'), esps = d.cuentas.filter(x => x.destinacion === 'ESPECIFICA');
   const ult = k.ultimo ? k.meses[k.ultimo - 1] : null, cierre = k.cierre;
   const ext = (cid, m) => d.extractos.find(e => e.cuentaId === cid && e.mes === m);
-  const adm = sesion.perfil.admin.editar;
+  const adm = sesion.perfil.admin.editar, porConf = d.cuentas.filter(x => x.porConfirmar);
+  const tasa = (m, mon) => d.tasas.find(t => t.mes === m && t.moneda === mon)?.valor;
   c.innerHTML = `
     <nav class="pestanas" aria-label="Años">${lista.map(a => `<a href="#" data-anio="${a}" ${a === anio ? 'aria-current="page"' : ''}>${a}</a>`).join('')}</nav>
     <div class="tarjeta objetivo"><h2>Caja ${anio}: real con los extractos y proyectada hasta diciembre</h2>
@@ -263,6 +264,8 @@ export async function vCaja(c, { editar, anios }) {
       ${cierre && cierre.mes === 12 && k.proyectados.length ? kpi('Caja libre proyectada a diciembre', cierre.libre, `total con específica ${M(cierre.total)}`) : ''}
       ${k.minimo ? kpi('Mínimo de la caja libre', k.minimo.libre, `${MESES_L[k.minimo.mes - 1]} · mínimo deseado ${M(d.cajaMinima)}`) : ''}
     </div>
+    ${porConf.length ? `<div class="aviso-linea alerta-est">${porConf.length} cuenta(s) se crearon al leer los extractos y falta confirmar su destinación (por ahora cuentan como caja libre): ${porConf.map(nomCuenta).join(', ')}. ${adm ? 'Confírmela en <a href="#/admin/bancos">Administración › Bancos y cuentas</a>.' : 'Pídale a Administración que la confirme.'}</div>` : ''}
+    ${d.faltaTasa.length ? `<div class="aviso-linea alerta-est">Falta la tasa de cambio de ${d.faltaTasa.map(x => `${x.moneda} en ${MESES_L[x.mes - 1]}`).join(', ')}: esas cuentas no se suman a la caja hasta registrarla${editar ? ' abajo, en «Tasas de cambio de cierre»' : ''}.</div>` : ''}
     ${k.bajoMinimo.length ? `<div class="aviso-linea alerta-est">La caja libre queda por debajo del mínimo deseado (${M(d.cajaMinima)}) en ${k.bajoMinimo.map(m => MESES_L[m - 1]).join(', ')}.</div>` : ''}
     ${ult ? `<div class="tarjeta"><h3>Caja libre mes a mes</h3>
       ${graficoMensual({ barras: k.meses.map(x => x.tipo === 'sin-dato' ? null : x.flujo), linea: k.meses.map(x => x.libre ?? null), ref: d.cajaMinima, etiquetaFinal: true, proyectados: k.proyectados })}
@@ -274,20 +277,29 @@ export async function vCaja(c, { editar, anios }) {
         <td class="${cls(x.tipo === 'real' ? x.flujo - x.flujoPpto - x.ajuste : 0)}">${x.tipo === 'real' ? Mn(x.flujo - x.flujoPpto - x.ajuste) : ''}</td>
         <td class="${cls(x.libre)}">${x.libre == null ? '' : Mn(x.libre)}</td><td>${x.especifica == null ? '' : Mn(x.especifica)}</td><td class="${cls(x.total)}">${x.total == null ? '' : Mn(x.total)}</td></tr>`).join('')}
       </tbody></table></div></div>
-    <div class="tarjeta"><h3>Extractos cargados ${anio}</h3><p class="nota">Saldo final de cada cuenta por mes, en millones de pesos. ${editar ? 'Clic en un saldo para borrarlo (pide confirmación).' : ''}</p>
+    <div class="tarjeta"><h3>Extractos cargados ${anio}</h3><p class="nota">Saldo final de cada cuenta por mes, en millones de pesos (las cuentas en USD o EUR, convertidas con la tasa de cierre del mes). ${editar ? 'Clic en un saldo para borrarlo (pide confirmación).' : ''}</p>
       <div class="tabla-cont"><table class="ext-rej"><thead><tr><th>Cuenta</th><th>Destinación</th>${MESES.map(m => `<th>${m}</th>`).join('')}</tr></thead><tbody>
       ${[...libres, ...esps].map(cta => `<tr><td>${nomCuenta(cta)}${cta.activa ? '' : ' <small class="nota">(inactiva)</small>'}</td><td>${cta.destinacion === 'LIBRE' ? 'Libre' : `<span title="${esc(cta.detalle)}">Específica</span>`}</td>
-        ${MESES.map((_, m) => { const e = ext(cta.id, m + 1); return `<td>${e ? (editar ? `<button type="button" class="btn chico" data-borrar="${cta.id}-${m + 1}" title="${esc(e.origen)} · ${esc(e.cargadoPor)}">${Mn(e.saldoFinal)}</button>` : `<span title="${esc(e.origen)}">${Mn(e.saldoFinal)}</span>`) : '·'}</td>`; }).join('')}</tr>`).join('')}
+        ${MESES.map((_, m) => { const e = ext(cta.id, m + 1); return `<td>${e ? (() => { const t = esc(e.origen) + (e.tasa ? ` · ${cta.moneda} ${Number(e.original.saldoFinal).toLocaleString('es-CO', { maximumFractionDigits: 2 })} a ${Number(e.tasa).toLocaleString('es-CO')}` : ''); return editar ? `<button type="button" class="btn chico" data-borrar="${cta.id}-${m + 1}" title="${t} · ${esc(e.cargadoPor)}">${Mn(e.saldoFinal)}</button>` : `<span title="${t}">${Mn(e.saldoFinal)}</span>`; })() : '·'}</td>`; }).join('')}</tr>`).join('')}
       </tbody></table></div></div>
-    ${editar ? `<div class="tarjeta"><h3>Cargar el extracto de un mes</h3>
-      <p class="nota">Suba el Excel o CSV que descarga del portal del banco (se lee la fecha, el valor o débitos y créditos, y el saldo). Si el banco solo da PDF, registre los saldos a mano. Solo se guardan los saldos y los totales del mes, no los movimientos.</p>
+    ${editar ? `<div class="tarjeta"><h3>Cargar extractos en PDF</h3>
+      <p class="nota">Seleccione todos los PDF del mes a la vez. De cada uno se leen el banco, la cuenta, el mes y el resumen (saldo anterior, entradas, salidas y saldo final); los movimientos no se guardan. Se leen Bancolombia, Bancolombia Panamá, Davivienda, Banco de Bogotá y los fondos de Alianza. ${adm ? 'Si la cuenta no está registrada, se crea y queda por confirmar su destinación.' : ''} Los PDF escaneados (imagen) no se pueden leer: registre esos saldos a mano.</p>
+      <form id="pl-pdf" class="formfila sup-pl"><label>Extractos (PDF)<input type="file" name="archivos" accept=".pdf" multiple></label><button type="submit" class="btn primario">Leer y cargar</button></form>
+      <div id="pl-pdf-res"></div></div>
+    ${d.monedas.length || d.faltaTasa.length ? `<div class="tarjeta"><h3>Tasas de cambio de cierre</h3>
+      <p class="nota">Pesos por unidad al cierre de cada mes (TRM del último día del mes para el dólar; para el euro, la tasa de cierre en pesos). Con ella se convierten a pesos los saldos y los totales de las cuentas en moneda extranjera. En la proyección se mantiene la del último mes con extracto.</p>
+      <div class="tabla-cont"><table class="tasas"><thead><tr><th>Mes</th>${[...new Set([...d.monedas, ...d.faltaTasa.map(x => x.moneda)])].map(mon => `<th>${mon} (pesos)</th>`).join('')}</tr></thead><tbody>
+      ${MESES_L.map((ml, m) => `<tr><td>${ml}</td>${[...new Set([...d.monedas, ...d.faltaTasa.map(x => x.moneda)])].map(mon => `<td><input type="number" step="0.01" min="0" data-tasa="${mon}-${m + 1}" value="${tasa(m + 1, mon) ?? ''}"></td>`).join('')}</tr>`).join('')}
+      </tbody></table></div><div class="acciones"><button type="button" class="btn primario" id="pl-tasas">Guardar tasas</button></div></div>` : ''}
+    <div class="tarjeta"><h3>Cargar el extracto de una cuenta y un mes</h3>
+      <p class="nota">Suba el PDF, Excel o CSV del banco para la cuenta y el mes elegidos (del Excel o CSV se leen la fecha, el valor o débitos y créditos, y el saldo). Solo se guardan los saldos y los totales del mes, no los movimientos.</p>
       <form id="pl-ext" class="formfila sup-pl">
         <label>Cuenta<select name="cuenta">${d.cuentas.filter(x => x.activa).map(x => `<option value="${x.id}">${nomCuenta(x)}</option>`).join('')}</select></label>
         <label>Mes<select name="mes">${MESES_L.map((m, i) => `<option value="${i + 1}" ${i + 1 === Math.max(1, (k.ultimo || new Date().getMonth()))  ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
-        <label>Archivo del banco<input type="file" name="archivo" accept=".xlsx,.csv,.txt"></label>
+        <label>Archivo del banco<input type="file" name="archivo" accept=".pdf,.xlsx,.csv,.txt"></label>
         <button type="submit" class="btn primario">Subir archivo</button>
       </form>
-      <details><summary>Registrar los saldos a mano (millones de pesos)</summary>
+      <details><summary>Registrar los saldos a mano (millones de pesos; en cuentas en USD o EUR, en esa moneda)</summary>
       <form id="pl-man" class="formfila sup-pl">
         <label>Saldo inicial<input type="number" step="0.01" name="saldoInicial" required></label>
         <label>Entradas<input type="number" step="0.01" name="entradas"></label>
@@ -307,9 +319,32 @@ export async function vCaja(c, { editar, anios }) {
     const { cuenta, mes } = sel();
     try { await accion(() => api('POST', `/api/planeacion/caja/${anio}/${mes}/cuentas/${cuenta}`, a, { cab: { 'X-Nombre': encodeURIComponent(a.name) } }), 'Extracto cargado'); await recargar(); } catch { /* aviso ya mostrado */ }
   };
+  $('#pl-pdf').onsubmit = async ev => {
+    ev.preventDefault(); const fs = [...ev.target.archivos.files]; if (!fs.length) return aviso('Elija los PDF de los extractos', true);
+    const res = $('#pl-pdf-res'), filas = [];
+    const pintar = () => { res.innerHTML = `<div class="tabla-cont"><table><thead><tr><th>Archivo</th><th>Resultado</th></tr></thead><tbody>${filas.map(f => `<tr><td>${esc(f.a)}</td><td class="${f.ok ? '' : 'neg'}">${f.t}</td></tr>`).join('')}</tbody></table></div>`; };
+    for (const a of fs) {
+      filas.push({ a: a.name, t: 'Leyendo…', ok: true }); pintar(); const f = filas[filas.length - 1];
+      try {
+        const r = await api('POST', '/api/planeacion/extractos-pdf', a, { cab: { 'X-Nombre': encodeURIComponent(a.name) } });
+        const v = x => (r.cuenta.moneda === 'COP' ? M(x) : `${r.cuenta.moneda} ${Number(x).toLocaleString('es-CO', { maximumFractionDigits: 2 })}`);
+        f.t = `${esc(r.cuenta.banco)} · ${esc(r.cuenta.nombre)} ··${esc(r.cuenta.terminacion)} · ${MESES_L[r.mes - 1]} ${r.anio} · saldo final ${v(r.saldoFinal)}${r.creada ? ' · <b>cuenta nueva, por confirmar</b>' : ''}`;
+      } catch (e) { f.ok = false; f.t = esc(e.message || 'No se pudo leer'); }
+      pintar();
+    }
+    const ok = filas.filter(f => f.ok).length;
+    aviso(`${ok} de ${filas.length} extracto(s) cargados`, ok < filas.length);
+    const guardado = res.innerHTML; await recargar(); const r2 = $('#pl-pdf-res'); if (r2) r2.innerHTML = guardado;
+  };
+  const bt = $('#pl-tasas');
+  if (bt) bt.onclick = async () => {
+    const tasas = [...c.querySelectorAll('[data-tasa]')].map(i => { const [moneda, mes] = i.dataset.tasa.split('-'); return { moneda, mes: Number(mes), valor: i.value === '' ? null : Number(i.value) }; });
+    try { await accion(() => api('PUT', `/api/planeacion/caja/${anio}/tasas`, { tasas }), 'Tasas guardadas'); await recargar(); } catch { /* */ }
+  };
   $('#pl-man').onsubmit = async ev => {
-    ev.preventDefault(); const g = new FormData(ev.target), n = k => (g.get(k) === '' ? null : Number(g.get(k)) * 1e6);
-    const { cuenta, mes } = sel();
+    ev.preventDefault(); const g = new FormData(ev.target);
+    const { cuenta, mes } = sel(), ext = d.cuentas.find(x => String(x.id) === cuenta)?.moneda !== 'COP';
+    const n = k => (g.get(k) === '' ? null : Number(g.get(k)) * (ext ? 1 : 1e6));
     try { await accion(() => api('PUT', `/api/planeacion/caja/${anio}/${mes}/cuentas/${cuenta}`, { saldoInicial: n('saldoInicial'), entradas: n('entradas'), salidas: n('salidas'), saldoFinal: n('saldoFinal') }), 'Saldos guardados'); await recargar(); } catch { /* */ }
   };
   c.querySelectorAll('[data-borrar]').forEach(b => b.onclick = async () => {
@@ -342,19 +377,23 @@ function vAjustes(c, d, { editar, recargar }) {
 export async function aBancos(c) {
   const cuentas = await api('GET', '/api/bancos/cuentas'), edita = sesion.perfil.admin.editar, dis = edita ? '' : 'disabled';
   const opt = (o, v) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${t}</option>`).join('');
-  const DEST = { LIBRE: 'Libre (financia la operación)', ESPECIFICA: 'Destinación específica' };
+  const DEST = { LIBRE: 'Libre (financia la operación)', ESPECIFICA: 'Destinación específica' }, MONEDAS = { COP: 'Pesos', USD: 'Dólares', EUR: 'Euros' };
+  const nConf = cuentas.filter(x => x.porConfirmar).length;
   c.innerHTML = `<div class="tarjeta"><p class="nota">Cuentas bancarias de CEIPA. La destinación define si el saldo cuenta como caja libre para la operación o si está reservado para un fin específico (por ejemplo fondos de un convenio, becas o un crédito). Del número de cuenta se guardan solo los últimos 4 dígitos.</p>
-    <div class="tabla-cont"><table><thead><tr><th>Banco</th><th>Nombre</th><th>Tipo</th><th>Terminación</th><th>Destinación</th><th>Para qué (si es específica)</th><th>Activa</th>${edita ? '<th></th>' : ''}</tr></thead><tbody>
+    ${nConf ? `<div class="aviso-linea alerta-est">${nConf} cuenta(s) se crearon al leer extractos en PDF: revise el nombre y la destinación y pulse «Confirmar».</div>` : ''}
+    <div class="tabla-cont"><table><thead><tr><th>Banco</th><th>Nombre</th><th>Tipo</th><th>Terminación</th><th>Moneda</th><th>Destinación</th><th>Para qué (si es específica)</th><th>Activa</th>${edita ? '<th></th>' : ''}</tr></thead><tbody>
     ${cuentas.map(x => `<tr data-id="${x.id}"><td><input type="text" name="banco" value="${esc(x.banco)}" ${dis}></td><td><input type="text" name="nombre" value="${esc(x.nombre)}" ${dis}></td>
       <td><select name="tipo" ${dis}>${opt(TIPOS_CTA, x.tipo)}</select></td><td><input type="text" name="terminacion" maxlength="4" inputmode="numeric" value="${esc(x.terminacion)}" ${dis}></td>
-      <td><select name="destinacion" ${dis}>${opt(DEST, x.destinacion)}</select></td><td><input type="text" name="detalle" value="${esc(x.detalle)}" ${dis}></td>
-      <td><input type="checkbox" name="activa" ${x.activa ? 'checked' : ''} ${dis}></td>${edita ? '<td><button type="button" class="btn chico" data-guardar>Guardar</button></td>' : ''}</tr>`).join('') || `<tr><td colspan="8" class="nota">Sin cuentas registradas.</td></tr>`}
+      <td><select name="moneda" ${dis}>${opt(MONEDAS, x.moneda)}</select></td>
+      <td><select name="destinacion" ${dis}>${opt(DEST, x.destinacion)}</select>${x.porConfirmar ? '<br><small class="neg">Por confirmar</small>' : ''}</td><td><input type="text" name="detalle" value="${esc(x.detalle)}" ${dis}></td>
+      <td><input type="checkbox" name="activa" ${x.activa ? 'checked' : ''} ${dis}></td>${edita ? `<td><button type="button" class="btn chico ${x.porConfirmar ? 'primario' : ''}" data-guardar>${x.porConfirmar ? 'Confirmar' : 'Guardar'}</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="9" class="nota">Sin cuentas registradas.</td></tr>`}
     </tbody></table></div></div>
     ${edita ? `<div class="tarjeta"><h3>Agregar una cuenta</h3><form id="cta-nueva" class="formfila sup-pl">
       <label>Banco<input type="text" name="banco" required placeholder="Bancolombia"></label>
       <label>Nombre<input type="text" name="nombre" required placeholder="Recaudo matrículas"></label>
       <label>Tipo<select name="tipo">${opt(TIPOS_CTA, 'AHORROS')}</select></label>
       <label>Últimos 4 dígitos<input type="text" name="terminacion" maxlength="4" inputmode="numeric"></label>
+      <label>Moneda<select name="moneda">${opt(MONEDAS, 'COP')}</select></label>
       <label>Destinación<select name="destinacion">${opt(DEST, 'LIBRE')}</select></label>
       <label>Para qué (si es específica)<input type="text" name="detalle"></label>
       <button type="submit" class="btn primario">Agregar</button></form></div>` : ''}`;

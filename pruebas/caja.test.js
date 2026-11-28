@@ -102,3 +102,82 @@ test('API: cuentas en Administración, extractos y caja del año', async () => {
   assert.equal(c2.cuentas.length, 1, 'la cuenta inactiva sin extractos no aparece');
   assert.equal(c2.caja.meses[9].faltan.length, 0);
 });
+
+/* ---------- extractos en PDF (formatos de los bancos, con cifras inventadas) ---------- */
+import { leerResumenPdf, numeroPdf } from '../servidor/planeacion/extractosPdf.js';
+import { lineasPdf } from '../servidor/planeacion/pdf.js';
+
+/** PDF mínimo de una página con una línea de texto por renglón (Helvetica, solo ASCII). */
+function pdfDe(lineas) {
+  const tx = s => s.replace(/[\\()]/g, m => '\\' + m);
+  const flujo = 'BT /F1 9 Tf 40 800 Td 12 TL\n' + lineas.map(l => `(${tx(l)}) Tj T*`).join('\n') + '\nET';
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    `<< /Length ${flujo.length} >>\nstream\n${flujo}\nendstream`, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'];
+  let s = '%PDF-1.4\n'; const off = [];
+  objs.forEach((o, i) => { off.push(s.length); s += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = s.length;
+  s += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n` + off.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join('');
+  s += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return Buffer.from(s, 'latin1');
+}
+const BANCOLOMBIA = ['ESTADO DE CUENTA', 'DESDE: 2026/09/30 HASTA: 2026/10/31', 'CUENTA CORRIENTE', 'NUMERO 123456789',
+  'SALDO ANTERIOR $ -1,000,000.00 SALDO PROMEDIO $ 5,000,000', 'TOTAL ABONOS $ 9,000,000.50 CUPO SOBREGIRO $ .00',
+  'TOTAL CARGOS $ 3,000,000.25 VALOR INTERESES COBRADOS $ .00', 'SALDO ACTUAL $ 5,000,000.25 RETEFUENTE $ .00',
+  'FECHA DESCRIPCION SUCURSAL DCTO. VALOR SALDO', '1/10 PAGO DE PROV TERCERO INVENTADO 9,000,000.50 8,000,000.50'];
+const PANAMA = ['EMPRESA INVENTADA DESDE 01/10/2026 HASTA 31/10/2026', 'CUENTA DE AHORROS', 'CIUDAD NUMERO 80100099991',
+  'SALDO ANTERIOR USD 1,000.00 SALDO PROMEDIO USD 1,000.00', 'TOTAL ABONOS USD 500.00', 'TOTAL CARGOS USD 100.00', 'SALDO ACTUAL USD 1,400.00'];
+
+test('lee el resumen de los formatos en PDF de cada banco', () => {
+  assert.equal(numeroPdf('2.520.320,92'), 2520320.92); assert.equal(numeroPdf('$ -14,302,253.93'), -14302253.93); assert.equal(numeroPdf('$ .00'), 0);
+  const b = leerResumenPdf(BANCOLOMBIA);
+  assert.deepEqual([b.banco, b.tipo, b.moneda, b.anio, b.mes, b.terminacion, b.saldoInicial, b.entradas, b.salidas, b.saldoFinal],
+    ['Bancolombia', 'CORRIENTE', 'COP', 2026, 10, '6789', -1000000, 9000000.5, 3000000.25, 5000000.25]);
+  const p = leerResumenPdf(PANAMA);
+  assert.deepEqual([p.banco, p.tipo, p.moneda, p.terminacion, p.saldoFinal], ['Bancolombia Panamá', 'AHORROS', 'USD', '9991', 1400]);
+  const d = leerResumenPdf(['CUENTA DE AHORROS', '0000 0000 4321', 'INFORME DEL MES: OCTUBRE /2026', 'Saldo Anterior $1,000.00', 'Más Créditos $200.00', 'Menos Débitos $50.00', 'Nuevo Saldo $1,150.00']);
+  assert.deepEqual([d.banco, d.tipo, d.mes, d.terminacion, d.saldoFinal], ['Davivienda', 'AHORROS', 10, '4321', 1150]);
+  const g = leerResumenPdf(['Extracto Cuenta Corriente', 'FECHA EXTRACTO Octubre - Octubre 2026', 'Cuenta Número: 111222333', 'Saldo Inicial: 1,000.00',
+    'Total 000010 Abonos: 500.00', 'Total 000020 Cargos: -300.00', 'Total IVA: -10.00', 'Total 4x1000 GMF: -2.00', 'Saldo Final: 1,188.00']);
+  assert.deepEqual([g.banco, g.mes, g.terminacion, g.entradas, g.salidas], ['Banco de Bogotá', 10, '2333', 500, 312]);
+  const f = leerResumenPdf(['Desde: 01 OCTUBRE 2026', 'Hasta: 31 OCTUBRE 2026', 'Fondo Inventado', 'Tipo de Fondo Número de Encargo', 'Abierto Moderado 01/01/2000 80010009999-1',
+    'Saldo Inicial 1.000,00 1,0 0,00', 'Adiciones 100,00 0,00', 'Retiros 50,00 0,00', 'Rendimientos después de gastos 10,00 0,00', 'Saldo Final 1.060,00 1,0']);
+  assert.deepEqual([f.banco, f.tipo, f.fondo, f.terminacion, f.entradas, f.salidas], ['Alianza Fiduciaria', 'FIDUCIA', 'Fondo Inventado', '9999', 110, 50]);
+  assert.throws(() => leerResumenPdf([]), /escaneado/);
+  assert.throws(() => leerResumenPdf(BANCOLOMBIA.map(l => l.replace('5,000,000.25 RETE', '5,000,101.25 RETE'))), /no cuadran/);
+  assert.throws(() => leerResumenPdf(['Otro banco', 'Saldo 1']), /No se reconoce/);
+});
+
+test('extrae el texto de un PDF por líneas', async () => {
+  const l = await lineasPdf(pdfDe(BANCOLOMBIA));
+  assert.ok(l.includes('TOTAL ABONOS $ 9,000,000.50 CUPO SOBREGIRO $ .00'), l.join('|'));
+});
+
+test('carga extractos en PDF: crea la cuenta por confirmar y convierte la moneda extranjera', async () => {
+  const r = await ok(pedir('POST', '/api/planeacion/extractos-pdf', { como: U.su, crudo: pdfDe(BANCOLOMBIA), nombre: 'octubre.pdf' }));
+  assert.equal(r.creada, true); assert.equal(r.mes, 10); assert.equal(r.saldoFinal, 5000000.25);
+  const r2 = await ok(pedir('POST', '/api/planeacion/extractos-pdf', { como: U.su, crudo: pdfDe(BANCOLOMBIA), nombre: 'otra vez.pdf' }));
+  assert.equal(r2.creada, false); assert.equal(r2.cuenta.id, r.cuenta.id);
+  const usd = await ok(pedir('POST', '/api/planeacion/extractos-pdf', { como: U.su, crudo: pdfDe(PANAMA), nombre: 'panama.pdf' }));
+  assert.equal(usd.cuenta.moneda, 'USD');
+  const ctas = await ok(pedir('GET', '/api/bancos/cuentas', { como: U.su }));
+  const nueva = ctas.find(c => c.id === r.cuenta.id);
+  assert.equal(nueva.porConfirmar, true); assert.equal(nueva.destinacion, 'LIBRE'); assert.equal(nueva.terminacion, '6789');
+  let caja = await ok(pedir('GET', '/api/planeacion/caja/2026', { como: U.su }));
+  assert.deepEqual(caja.faltaTasa, [{ mes: 10, moneda: 'USD' }]);
+  assert.ok(!caja.extractos.some(e => e.cuentaId === usd.cuenta.id));
+  await ok(pedir('PUT', '/api/planeacion/caja/2026/tasas', { como: U.su, cuerpo: { tasas: [{ mes: 10, moneda: 'USD', valor: 4000 }] } }));
+  caja = await ok(pedir('GET', '/api/planeacion/caja/2026', { como: U.su }));
+  assert.deepEqual(caja.faltaTasa, []);
+  const e = caja.extractos.find(x => x.cuentaId === usd.cuenta.id);
+  assert.equal(e.saldoFinal, 1400 * 4000); assert.equal(e.original.saldoFinal, 1400); assert.equal(e.tasa, 4000);
+  /* confirmar desde Administración quita la marca */
+  await ok(pedir('PUT', `/api/bancos/cuentas/${r.cuenta.id}`, { como: U.su, cuerpo: { nombre: 'Recaudo inventado' } }));
+  assert.equal((await ok(pedir('GET', '/api/bancos/cuentas', { como: U.su }))).find(c => c.id === r.cuenta.id).porConfirmar, false);
+  /* sin permiso de Administración no se crean cuentas nuevas */
+  const otro = pdfDe(BANCOLOMBIA.map(l => l.replace('123456789', '987650000')));
+  const sin = await pedir('POST', '/api/planeacion/extractos-pdf', { como: U.con, crudo: otro, nombre: 'x.pdf' });
+  assert.notEqual(sin.status, 200);
+  const malo = await pedir('POST', '/api/planeacion/extractos-pdf', { como: U.su, crudo: Buffer.from('no soy pdf'), nombre: 'x.pdf' });
+  assert.equal(malo.status, 422);
+});

@@ -267,3 +267,5 @@ table.ext-rej td, table.ext-rej th { text-align: right; white-space: nowrap } ta
   .kpis.fijas { grid-auto-flow: column; grid-auto-columns: minmax(150px, 46%); grid-template-columns: none; overflow-x: auto; gap: 8px; scrollbar-width: thin }
   .kpis.fijas .kpi { padding: 8px 10px } .kpis.fijas .kpi b { font-size: 16px } .kpis.fijas .kpi small:nth-of-type(2) { display: none }
 }
+small.neg { color: var(--neg) }
+table.tasas { width: auto } table.tasas input { width: 9rem }
