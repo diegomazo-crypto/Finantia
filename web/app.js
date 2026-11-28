@@ -618,3 +618,12 @@ function detalleBitacora(r) {
 }
 
 iniciar().catch(e => { app.innerHTML = `<div class="tarjeta"><h2>Finantia no pudo iniciar</h2><p class="nota">${esc(e.message)}</p></div>`; });
+
+/* Indicadores fijos: la primera fila de tarjetas de resumen de cada pantalla queda visible bajo el
+   encabezado al bajar (pedido de Diego). Se marca sola cada vez que se pinta una pantalla. */
+const cab = document.querySelector('header.top');
+if (cab && 'ResizeObserver' in window) new ResizeObserver(() => document.documentElement.style.setProperty('--alto-cab', cab.offsetHeight + 'px')).observe(cab);
+new MutationObserver(() => {
+  const k = app.querySelector('.kpis');
+  if (k && !k.classList.contains('fijas')) { app.querySelectorAll('.kpis.fijas').forEach(x => x.classList.remove('fijas')); k.classList.add('fijas'); }
+}).observe(app, { childList: true, subtree: true });

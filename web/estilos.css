@@ -259,3 +259,11 @@ tr.proy td { color: var(--muted); font-style: italic }
 #cta-nueva input[name="terminacion"], tr[data-id] input[name="terminacion"] { width: 70px }
 tr[data-id] input[type="text"] { min-width: 120px }
 table.ext-rej td, table.ext-rej th { text-align: right; white-space: nowrap } table.ext-rej td:first-child, table.ext-rej th:first-child, table.ext-rej td:nth-child(2), table.ext-rej th:nth-child(2) { text-align: left }
+
+/* Indicadores fijos al hacer scroll (la primera fila de tarjetas de cada pantalla) */
+.kpis.fijas { position: sticky; top: var(--alto-cab, 60px); z-index: 4; background: var(--bg); padding-block: 8px; margin-top: -8px; box-shadow: 0 6px 8px -8px rgba(0, 0, 0, .25) }
+@media (max-width: 640px) {
+  /* en celular: una franja que se desliza de lado, para no tapar la pantalla */
+  .kpis.fijas { grid-auto-flow: column; grid-auto-columns: minmax(150px, 46%); grid-template-columns: none; overflow-x: auto; gap: 8px; scrollbar-width: thin }
+  .kpis.fijas .kpi { padding: 8px 10px } .kpis.fijas .kpi b { font-size: 16px } .kpis.fijas .kpi small:nth-of-type(2) { display: none }
+}
