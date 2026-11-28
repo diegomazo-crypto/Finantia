@@ -219,3 +219,18 @@ table.interna td, table.interna th { padding: 4px 8px }
 table.interna td:first-child, table.interna th:first-child { position: static; background: none }
 tr.det-cc > td { background: var(--bg) !important; white-space: normal }
 .alerta-est { background: color-mix(in srgb, var(--mark) 16%, transparent); border-radius: 8px; padding: 8px 12px; font-size: 13px; margin: 0 0 10px; max-width: 110ch }
+
+/* Ejecución: gráfico mes a mes con cifras al pasar el mouse */
+.botonera { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-bottom: 6px }
+.botonera .btn.chico { margin-left: 0; margin-right: 4px }
+.mes-graf { position: relative }
+svg.grafico .zona { fill: transparent; cursor: pointer; outline: none }
+svg.grafico .zona.activa, svg.grafico .zona:focus-visible { fill: color-mix(in srgb, var(--accent) 10%, transparent) }
+svg.grafico .l-ppto { fill: none; stroke: var(--muted); stroke-width: 2; stroke-dasharray: 6 4 }
+svg.grafico .l-real { fill: none; stroke: var(--accent); stroke-width: 2.5 }
+svg.grafico .p-real { fill: var(--accent) } svg.grafico .p-real.est { fill: var(--surface); stroke: var(--accent); stroke-width: 1.5 }
+.leyenda b.l-ppto { background: none; border-top: 2px dashed var(--muted); height: 0; border-radius: 0; vertical-align: 3px }
+.tip { position: absolute; top: 8px; z-index: 3; min-width: 190px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; box-shadow: 0 4px 14px rgb(0 0 0 / .15); font-size: 12px; pointer-events: none }
+.tip h4 { margin: 0 0 4px; font-size: 13px } .tip h4 small { color: var(--muted); font-weight: 400 }
+.tip p { margin: 6px 0 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em }
+.tip div { display: flex; justify-content: space-between; gap: 14px } .tip b.pos { color: var(--pos) } .tip b.neg { color: var(--neg) }

@@ -17,7 +17,7 @@ const TOTALES = new Set(['NET', 'MB', 'RO', 'RN']);
 /** % de ejecución, salvo en resultados con presupuesto negativo o cero (ahí se lee la diferencia). */
 const pctTxt = r => (r.pct == null || (r.tipo === 'ingreso' && (r.ppto <= 0 || r.real < 0)) ? '—' : P(r.pct));
 
-const est = { anio: null, hasta: null, unidad: null, abiertos: new Set(), serie: 'NET' };
+const est = { anio: null, hasta: null, unidad: null, abiertos: new Set(), serie: 'NET', modo: 'mes' };
 
 export async function pantallaEjecucion(anio) {
   const anios = await api('GET', '/api/ejecucion');
@@ -25,7 +25,7 @@ export async function pantallaEjecucion(anio) {
   if (!anio) anio = anios.includes(hoy) ? hoy : anios[0] || hoy;
   if (est.anio !== anio) Object.assign(est, { anio, hasta: null, unidad: null, abiertos: new Set() });
   const t = await api('GET', `/api/ejecucion/${anio}`);
-  const mod = modulo('EJECUCION'), lista = anios.includes(anio) ? anios : [anio, ...anios].sort((a, b) => b - a);
+  const mod = modulo('EJECUCION'), lista = [...new Set([anio, ...anios])].sort((a, b) => a - b);
   app.innerHTML = `
     <div class="cabeza"><div><div class="miga">Ejecución presupuestal</div><h1>Seguimiento a la ejecución ${anio}</h1>
       <p class="nota">${t.base ? 'Base de comparación: ' + esc(t.base.descripcion) : 'Todavía no hay base de comparación para este año.'}</p></div></div>
@@ -79,9 +79,11 @@ function vTablero(c, t, mod) {
       <div class="tarjeta"><h3>Ejecución por rubro a ${MESES_L[est.hasta - 1]}</h3>${graficoRubros(a.rubros)}
         <p class="nota">Barra: real sobre presupuesto a la fecha. Línea: 100 %. En costos y gastos, por encima de ${Math.round(UMBRAL.gasVerde * 100)} % es alerta y de ${Math.round(UMBRAL.gasAmarillo * 100)} % desviación; por debajo de ${Math.round(UMBRAL.baja * 100)} %, baja ejecución. En ingresos, por debajo de ${Math.round(UMBRAL.ingVerde * 100)} % es alerta y de ${Math.round(UMBRAL.ingAmarillo * 100)} % desviación.</p></div>
       <div class="tarjeta"><h3>Mes a mes</h3>
-        <div class="acciones" role="group" aria-label="Serie">${[['NET', 'Ingresos netos'], ['RN', 'Resultado neto']].map(([k, tt]) => `<button type="button" class="btn chico ${est.serie === k ? 'primario' : ''}" data-serie="${k}" aria-pressed="${est.serie === k}">${tt}</button>`).join('')}</div>
-        ${graficoMeses(a.serie, est.serie, t.estimados || [])}
-        <div class="leyenda"><span><b class="ppto"></b>Presupuesto</span><span><b class="real"></b>Real</span>${(t.estimados || []).length ? '<span><b class="estimado"></b>Real estimado con saldo anterior</span>' : ''}<span><b class="linea"></b>Acumulado real − presupuesto (eje derecho)</span></div></div>
+        <div class="botonera"><div role="group" aria-label="Cifra">${[['NET', 'Ingresos netos'], ['RN', 'Resultado neto']].map(([k, tt]) => `<button type="button" class="btn chico ${est.serie === k ? 'primario' : ''}" data-serie="${k}" aria-pressed="${est.serie === k}">${tt}</button>`).join('')}</div>
+          <div role="group" aria-label="Vista">${[['mes', 'Cada mes'], ['acum', 'Acumulado']].map(([k, tt]) => `<button type="button" class="btn chico ${est.modo === k ? 'primario' : ''}" data-modo="${k}" aria-pressed="${est.modo === k}">${tt}</button>`).join('')}</div></div>
+        ${graficoMeses(a.serie, est.serie, t.estimados || [], est.modo)}
+        <div class="leyenda">${est.modo === 'acum' ? '<span><b class="l-ppto"></b>Presupuesto acumulado</span><span><b class="real"></b>Real acumulado</span>' : `<span><b class="ppto"></b>Presupuesto del mes</span><span><b class="real"></b>Real del mes</span>${(t.estimados || []).length ? '<span><b class="estimado"></b>Real estimado (saldo anterior)</span>' : ''}`}</div>
+        <p class="nota">Pase el mouse (o toque) un mes para ver las cifras. En millones de pesos.</p></div>
     </div>
 
     ${u == null ? `<div class="tarjeta"><h2>Semáforo por unidad</h2>${sinCC.length ? '<p class="alerta-est"><b>Estimado.</b> El balance no trae centro de costos: el reparto entre unidades (sobre todo Barranquilla, que usa las mismas cuentas que Sabaneta) puede alejarse bastante del real. Úselo como referencia hasta tener el balance por centro de costos.</p>' : ''}<p class="nota">Toque una unidad para ver su análisis.</p>
@@ -109,6 +111,8 @@ function vTablero(c, t, mod) {
   $('#ej-unidad').onchange = e => { est.unidad = e.target.value === '' ? null : Number(e.target.value); est.abiertos.clear(); vTablero(c, t, mod); };
   c.querySelectorAll('[data-unidad]').forEach(b => b.onclick = () => { est.unidad = Number(b.dataset.unidad); est.abiertos.clear(); vTablero(c, t, mod); c.scrollIntoView({ behavior: 'smooth' }); });
   c.querySelectorAll('[data-serie]').forEach(b => b.onclick = () => { est.serie = b.dataset.serie; vTablero(c, t, mod); });
+  c.querySelectorAll('[data-modo]').forEach(b => b.onclick = () => { est.modo = b.dataset.modo; vTablero(c, t, mod); });
+  activarTip(c, a.serie, est.serie, t.estimados || []);
   c.querySelectorAll('[data-rubro]').forEach(b => b.onclick = () => { const k = 'r:' + b.dataset.rubro; est.abiertos.has(k) ? est.abiertos.delete(k) : est.abiertos.add(k); vTablero(c, t, mod); });
   c.querySelectorAll('[data-linea]').forEach(b => b.onclick = () => abrirLinea(b, t));
   $('#ej-ver-sin')?.addEventListener('click', async () => {
@@ -166,26 +170,63 @@ function graficoRubros(rubros) {
     }).join('')}</svg></div>`;
 }
 
-function graficoMeses(serie, k, estimados) {
-  const W = 640, H = 260, L = 56, R = 56, T = 14, B = 26, bw = (W - L - R) / 12;
-  const pp = serie.map(s => s['p' + k]), rr = serie.map(s => s['r' + k]);
-  let acc = 0; const brecha = serie.map((s, m) => (s.cargado ? (acc += (rr[m] ?? 0) - pp[m]) : null));
-  const vals = [0, ...pp, ...rr.filter(v => v != null)];
+/**
+ * Mes a mes: presupuesto (gris) y real (color) de cada mes, o las dos curvas acumuladas.
+ * Al pasar el mouse (o tocar) un mes se ven sus cifras.
+ */
+function datosMeses(serie, k, estimados) {
+  let ap = 0, ar = 0;
+  return serie.map((s, m) => {
+    const p = s['p' + k], r = s['r' + k];
+    ap += p; if (r != null) ar += r;
+    return { m, p, r, ap, ar: r != null ? ar : null, est: estimados.includes(m + 1) };
+  });
+}
+function graficoMeses(serie, k, estimados, modo) {
+  const d = datosMeses(serie, k, estimados);
+  const W = 640, H = 270, L = 58, R = 12, T = 14, B = 28, bw = (W - L - R) / 12;
+  const vals = modo === 'acum' ? [0, ...d.map(x => x.ap), ...d.filter(x => x.ar != null).map(x => x.ar)] : [0, ...d.map(x => x.p), ...d.filter(x => x.r != null).map(x => x.r)];
   let lo = Math.min(...vals), hi = Math.max(...vals); if (hi === lo) hi = lo + 1;
-  const y = v => T + (hi - v) / (hi - lo) * (H - T - B);
-  const bv = brecha.filter(v => v != null); let b0 = Math.min(0, ...bv), b1 = Math.max(0, ...bv); if (b1 === b0) b1 = b0 + 1;
-  const yb = v => T + (b1 - v) / (b1 - b0) * (H - T - B), x = m => L + m * bw;
-  const marcas = [lo, (lo + hi) / 2, hi];
-  return `<div class="tabla-cont"><svg class="grafico" viewBox="0 0 ${W} ${H}" role="img" aria-label="${k === 'NET' ? 'Ingresos netos' : 'Resultado neto'} por mes, presupuesto y real">
-    ${marcas.map(v => `<line class="eje" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${Mn(v)}</text>`).join('')}
-    <line class="eje cero" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"/>
-    ${pp.map((v, m) => `<rect class="ppto" x="${x(m) + bw * 0.12}" y="${y(Math.max(0, v))}" width="${bw * 0.36}" height="${Math.max(1, Math.abs(y(v) - y(0)))}" rx="2"><title>${MES_C[m]} presupuesto ${M(v)}</title></rect>`).join('')}
-    ${rr.map((v, m) => v == null ? '' : `<rect class="${estimados.includes(m + 1) ? 'estimado' : 'real'} ${v < 0 ? 'neg' : ''}" x="${x(m) + bw * 0.5}" y="${y(Math.max(0, v))}" width="${bw * 0.36}" height="${Math.max(1, Math.abs(y(v) - y(0)))}" rx="2"><title>${MES_C[m]} real ${M(v)}</title></rect>`).join('')}
-    ${MES_C.map((t, m) => `<text class="tick" x="${x(m) + bw / 2}" y="${H - 8}" text-anchor="middle">${t}</text>`).join('')}
-    <polyline class="linea" points="${brecha.map((v, m) => v == null ? '' : `${x(m) + bw / 2},${yb(v)}`).filter(Boolean).join(' ')}"/>
-    ${brecha.map((v, m) => v == null ? '' : `<circle class="punto" cx="${x(m) + bw / 2}" cy="${yb(v)}" r="3"><title>Acumulado real − presupuesto a ${MES_C[m]}: ${M(v)}</title></circle>`).join('')}
-    ${[b0, 0, b1].map(v => `<text class="tick der" x="${W - R + 6}" y="${yb(v) + 4}">${Mn(v)}</text>`).join('')}
-  </svg></div>`;
+  const paso = (() => { const r = (hi - lo) / 4, e = 10 ** Math.floor(Math.log10(r)), f = r / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e; })();
+  lo = Math.floor(lo / paso) * paso; hi = Math.ceil(hi / paso) * paso;
+  const y = v => T + (hi - v) / (hi - lo) * (H - T - B), px = m => L + m * bw, cx = m => px(m) + bw / 2;
+  const marcas = []; for (let v = lo; v <= hi + paso / 2; v += paso) marcas.push(v);
+  const barra = (v, x0, w, c) => `<rect class="${c}${v < 0 ? ' neg' : ''}" x="${x0}" y="${y(Math.max(0, v))}" width="${w}" height="${Math.max(1, Math.abs(y(v) - y(0)))}" rx="2"/>`;
+  const reales = d.filter(x => x.ar != null);
+  const cuerpo = modo === 'acum'
+    ? `<polyline class="l-ppto" points="${d.map(x => `${cx(x.m)},${y(x.ap)}`).join(' ')}"/>
+       <polyline class="l-real" points="${reales.map(x => `${cx(x.m)},${y(x.ar)}`).join(' ')}"/>
+       ${reales.map(x => `<circle class="p-real${x.est ? ' est' : ''}" cx="${cx(x.m)}" cy="${y(x.ar)}" r="3.5"/>`).join('')}
+       ${reales.length ? (() => { const u = reales[reales.length - 1]; return `<text class="final" x="${cx(u.m)}" y="${y(u.ar) - 10}" text-anchor="middle">${Mn(u.ar)}</text>`; })() : ''}`
+    : d.map(x => barra(x.p, px(x.m) + bw * 0.14, bw * 0.34, 'ppto') + (x.r == null ? '' : barra(x.r, px(x.m) + bw * 0.52, bw * 0.34, x.est ? 'estimado' : 'real'))).join('');
+  return `<div class="tabla-cont mes-graf"><svg class="grafico" viewBox="0 0 ${W} ${H}" role="img" aria-label="${k === 'NET' ? 'Ingresos netos' : 'Resultado neto'} ${modo === 'acum' ? 'acumulado' : 'por mes'}, presupuesto y real">
+    ${marcas.map(v => `<line class="eje${Math.abs(v) < paso / 2 ? ' cero' : ''}" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${Mn(v)}</text>`).join('')}
+    ${cuerpo}
+    ${MES_C.map((t, m) => `<text class="tick" x="${cx(m)}" y="${H - 9}" text-anchor="middle">${t}</text>`).join('')}
+    ${d.map(x => `<rect class="zona" data-mes="${x.m}" x="${px(x.m)}" y="${T}" width="${bw}" height="${H - T - B}" tabindex="0" aria-label="${MESES_L[x.m]}"/>`).join('')}
+  </svg><div class="tip" hidden></div></div>`;
+}
+/** Cuadro con las cifras del mes bajo el mouse o el dedo. */
+function activarTip(c, serie, k, estimados) {
+  const cont = c.querySelector('.mes-graf'); if (!cont) return;
+  const d = datosMeses(serie, k, estimados), tip = cont.querySelector('.tip');
+  const fila = (t, v, cl = '') => `<div><span>${t}</span><b class="${cl}">${M(v)}</b></div>`;
+  const mostrar = z => {
+    const x = d[Number(z.dataset.mes)], dif = x.r == null ? null : x.r - x.p, difA = x.ar == null ? null : x.ar - x.ap;
+    const bien = v => (v == null ? '' : v >= 0 ? 'pos' : 'neg');
+    tip.innerHTML = `<h4>${MESES_L[x.m].replace(/^./, l => l.toUpperCase())}${x.est ? ' <small>(estimado)</small>' : ''}</h4>
+      <p>Del mes</p>${fila('Presupuesto', x.p)}${x.r == null ? '<div><span>Real</span><b>sin balance</b></div>' : fila('Real', x.r) + fila('Diferencia', dif, bien(dif))}
+      <p>Acumulado</p>${fila('Presupuesto', x.ap)}${x.ar == null ? '' : fila('Real', x.ar) + fila('Diferencia', difA, bien(difA))}`;
+    tip.hidden = false;
+    cont.querySelectorAll('.zona').forEach(o => o.classList.toggle('activa', o === z));
+    const cr = cont.getBoundingClientRect(), zr = z.getBoundingClientRect();
+    const izq = zr.left - cr.left + cont.scrollLeft + zr.width / 2, ancho = tip.offsetWidth;
+    tip.style.left = Math.max(4, Math.min(izq - ancho / 2, cont.scrollWidth - ancho - 4)) + 'px';
+  };
+  cont.querySelectorAll('.zona').forEach(z => {
+    z.addEventListener('mouseenter', () => mostrar(z)); z.addEventListener('focus', () => mostrar(z)); z.addEventListener('click', () => mostrar(z));
+  });
+  cont.addEventListener('mouseleave', () => { tip.hidden = true; cont.querySelectorAll('.zona').forEach(o => o.classList.remove('activa')); });
 }
 
 /* ------------------------------------------------------------------ archivos del año */
