@@ -1,6 +1,6 @@
 /** Rutas de la API. Cada ruta llama a un servicio, que es quien revisa los permisos. */
 import * as A from '../admin/admin.js';
-import { puede, veDetalleSensible } from '../admin/permisos.js';
+import { puede, puedePreguntar, veDetalleSensible } from '../admin/permisos.js';
 import * as P from '../presupuesto/servicio.js';
 import * as AR from '../presupuesto/archivos.js';
 import * as EV from '../presupuesto/evaluacion.js';
@@ -20,7 +20,7 @@ const entero = v => { const n = Number(v); if (!Number.isInteger(n)) falla(DATOS
 function perfil(a) {
   const modulos = [...a.modulosActivos].filter(m => m !== 'ADMINISTRACION').map(m => ({
     modulo: m, rol: a.accesos[m]?.rol || (a.es_superusuario ? 'SUPERUSUARIO' : null),
-    ver: puede(a, m, 'ver'), editar: puede(a, m, 'editar'), aprobar: puede(a, m, 'aprobar'), detalleSensible: veDetalleSensible(a, m)
+    ver: puede(a, m, 'ver'), editar: puede(a, m, 'editar'), aprobar: puede(a, m, 'aprobar'), detalleSensible: veDetalleSensible(a, m), preguntas: puedePreguntar(a, m)
   })).filter(x => x.ver);
   const admin = { ver: puede(a, 'ADMINISTRACION', 'ver'), editar: puede(a, 'ADMINISTRACION', 'editar') };
   return { id: a.id, nombre: a.nombre, correo: a.correo, superusuario: a.es_superusuario, modulos, admin };
@@ -42,7 +42,7 @@ export function rutasApi(db, auth, asistente, nomina) {
       if ('superusuario' in body) await A.cambiarSuperusuario(db, actor, id, !!body.superusuario);
     }),
     ruta('PUT', '/api/admin/usuarios/:id/accesos/:modulo', ({ actor, params, body }) =>
-      A.asignarAcceso(db, actor, entero(params.id), params.modulo, body.rol, { detalleSensible: !!body.detalleSensible })),
+      A.asignarAcceso(db, actor, entero(params.id), params.modulo, body.rol, { detalleSensible: !!body.detalleSensible, preguntas: !!body.preguntas })),
     ruta('DELETE', '/api/admin/usuarios/:id/accesos/:modulo', ({ actor, params }) => A.quitarAcceso(db, actor, entero(params.id), params.modulo)),
     ruta('GET', '/api/admin/aprobacion/:modulo', ({ actor, params }) => A.obtenerConfigAprobacion(db, actor, params.modulo)),
     ruta('PUT', '/api/admin/aprobacion/:modulo', ({ actor, params, body }) => A.configurarAprobacion(db, actor, params.modulo, body)),
@@ -128,7 +128,9 @@ export function rutasApi(db, auth, asistente, nomina) {
 
     /* Preguntas al asistente */
     ruta('GET', '/api/presupuesto/versiones/:id/preguntas', async ({ actor, params }) => ({ activo: asistente.activo, preguntas: await asistente.historial(db, actor, entero(params.id)) })),
-    ruta('POST', '/api/presupuesto/versiones/:id/preguntas', ({ actor, params, body }) => asistente.preguntar(db, actor, entero(params.id), { pregunta: body.pregunta, escenario: body.escenario || 'Moderado' }))
+    ruta('POST', '/api/presupuesto/versiones/:id/preguntas', ({ actor, params, body }) => asistente.preguntar(db, actor, entero(params.id), { pregunta: body.pregunta, escenario: body.escenario || 'Moderado' })),
+    ruta('GET', '/api/preguntas/:modulo/:anio', async ({ actor, params }) => ({ activo: asistente.activo, preguntas: await asistente.historialModulo(db, actor, params.modulo, entero(params.anio)) })),
+    ruta('POST', '/api/preguntas/:modulo/:anio', ({ actor, params, body }) => asistente.preguntarModulo(db, actor, params.modulo, entero(params.anio), { pregunta: body.pregunta, escenario: body.escenario || null, versionId: body.version ? entero(body.version) : null }))
   ];
   if (auth.modo === 'pruebas') rutas.push(
     ruta('GET', '/api/admin/claves-pruebas', ({ actor }) => PR.listarClaves(db, actor)),

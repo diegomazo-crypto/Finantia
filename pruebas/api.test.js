@@ -65,8 +65,8 @@ describe('Servidor', () => {
 
   test('el perfil dice qué puede hacer cada rol', async () => {
     const adm = await ok(pedir('POST', '/api/ingreso', { como: U.adm, cuerpo: {} }));
-    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PRESUPUESTO'), { modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: true });
-    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PLANEACION'), { modulo: 'PLANEACION', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: false });
+    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PRESUPUESTO'), { modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: true, preguntas: false });
+    assert.deepEqual(adm.modulos.find(m => m.modulo === 'PLANEACION'), { modulo: 'PLANEACION', rol: 'ADMINISTRACION', ver: true, editar: true, aprobar: false, detalleSensible: false, preguntas: false });
     assert.deepEqual(adm.admin, { ver: false, editar: false });
     const su = await ok(pedir('GET', '/api/yo', { como: U.su }));
     assert.equal(su.superusuario, true);
@@ -153,7 +153,7 @@ describe('Administración por la API', () => {
     assert.equal((await pedir('POST', '/api/admin/usuarios', { como: U.su, cuerpo: { nombre: 'Nueva', correo: 'nueva@demo.finantia' } })).status, 409);
     await ok(pedir('PUT', `/api/admin/usuarios/${id}/accesos/PRESUPUESTO`, { como: U.su, cuerpo: { rol: 'VISUALIZACION', detalleSensible: true } }));
     let us = await ok(pedir('GET', '/api/admin/usuarios', { como: U.su }));
-    assert.deepEqual(us.find(u => u.id === id).accesos, [{ modulo: 'PRESUPUESTO', rol: 'VISUALIZACION', detalle_sensible: true }]);
+    assert.deepEqual(us.find(u => u.id === id).accesos, [{ modulo: 'PRESUPUESTO', rol: 'VISUALIZACION', detalle_sensible: true, preguntas: false }]);
     assert.equal((await pedir('PUT', `/api/admin/usuarios/${id}/accesos/PRESUPUESTO`, { como: U.su, cuerpo: { rol: 'DUEÑO' } })).status, 422);
     await ok(pedir('PATCH', `/api/admin/usuarios/${id}`, { como: U.su, cuerpo: { activo: false } }));
     assert.equal((await pedir('GET', '/api/yo', { como: 'nueva@demo.finantia' })).status, 403, 'un usuario desactivado no entra');
@@ -339,13 +339,26 @@ describe('Archivos del ejercicio', () => {
 
 describe('Preguntas al asistente', () => {
   test('sin llave queda inactivo y lo dice', async () => {
-    const r = await ok(pedir('GET', '/api/presupuesto/versiones/1/preguntas', { como: U.con }));
+    const r = await ok(pedir('GET', '/api/presupuesto/versiones/1/preguntas', { como: U.su }));
     assert.equal(r.activo, false);
-    const p = await pedir('POST', '/api/presupuesto/versiones/1/preguntas', { como: U.con, cuerpo: { pregunta: 'Hola' } });
+    const p = await pedir('POST', '/api/presupuesto/versiones/1/preguntas', { como: U.su, cuerpo: { pregunta: 'Hola' } });
     assert.equal(p.status, 503);
   });
 
+  test('Preguntas necesita su permiso por módulo (lo asigna el Superusuario)', async () => {
+    assert.equal((await pedir('GET', '/api/presupuesto/versiones/1/preguntas', { como: U.apr })).status, 403);
+    assert.equal((await pedir('GET', '/api/preguntas/PLANEACION/2027', { como: U.apr })).status, 403);
+    const yo = await ok(pedir('GET', '/api/yo', { como: U.apr }));
+    assert.ok(yo.modulos.every(m => m.preguntas === false));
+    const su = await ok(pedir('GET', '/api/yo', { como: U.su }));
+    assert.ok(su.modulos.filter(m => m.ver).every(m => m.preguntas), 'el Superusuario siempre');
+  });
+
   test('con un cliente: envía los datos de la versión, guarda la respuesta y el historial', async () => {
+    const usuarios = await ok(pedir('GET', '/api/admin/usuarios', { como: U.su }));
+    const idDe = c => usuarios.find(u => u.correo === c).id;
+    for (const [c, m] of [[U.con, 'PRESUPUESTO'], [U.adm, 'PRESUPUESTO'], [U.con, 'PLANEACION'], [U.con, 'EJECUCION']])
+      await ok(pedir('PUT', `/api/admin/usuarios/${idDe(c)}/accesos/${m}`, { como: U.su, cuerpo: { rol: usuarios.find(u => u.correo === c).accesos.find(a => a.modulo === m).rol, detalleSensible: c === U.adm, preguntas: true } }));
     const llamadas = [];
     const cliente = { beta: { messages: { create: async req => { llamadas.push(req); return { model: req.model, stop_reason: 'end_turn', content: [{ type: 'text', text: `Respuesta ${llamadas.length}` }], usage: { input_tokens: 10, output_tokens: 5 } }; } } } };
     const { crearAsistente } = await import('../servidor/presupuesto/asistente.js');
@@ -370,6 +383,22 @@ describe('Preguntas al asistente', () => {
       const h = await (await fetch(`${b2}/api/presupuesto/versiones/1/preguntas`, { headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.adm } })).json();
       assert.equal(h.activo, true);
       assert.deepEqual(h.preguntas.map(x => x.respuesta), ['Respuesta 1', 'Respuesta 2']);
+      assert.match(llamadas[0].system, /módulo Presupuesto/);
+      // Planeación: solo cifras agregadas del módulo, sin CINTANA aparte ni bancos
+      const pm = (m, cuerpo) => fetch(`${b2}/api/preguntas/${m}/2027`, { method: 'POST', headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.con, 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo) });
+      const rp = await pm('PLANEACION', { pregunta: '¿Qué mueve el VPN?', escenario: 'Moderado' });
+      assert.equal(rp.status, 200, await rp.clone().text());
+      const reqP = llamadas[llamadas.length - 1], tP = JSON.stringify(reqP.messages);
+      assert.match(reqP.system, /módulo Planeación financiera/); assert.match(reqP.system, /otro módulo/);
+      assert.match(tP, /sensibilidadVPN/); assert.match(tP, /flujoCajaLibre/);
+      assert.doesNotMatch(tP, /CINTANA|"FX"|extracto|banco/i);
+      assert.equal(reqP.messages.length, 1, 'el historial de Planeación es aparte del de Presupuesto');
+      const rE = await pm('EJECUCION', { pregunta: '¿Cómo vamos?' });
+      assert.equal(rE.status, 200);
+      assert.match(llamadas[llamadas.length - 1].system, /módulo Ejecución presupuestal/);
+      const hP = await (await fetch(`${b2}/api/preguntas/PLANEACION/2027`, { headers: { 'X-Finantia': '1', 'X-Finantia-Correo': U.con } })).json();
+      assert.equal(hP.preguntas.length, 1);
+      assert.equal((await pm('OTRO', { pregunta: 'x' })).status, 404);
     } finally { await new Promise(r => s2.close(r)); }
   });
 });

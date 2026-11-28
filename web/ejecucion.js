@@ -7,6 +7,7 @@
  * automática, análisis por unidad y drill down rubro → línea → centro de costos y cuenta.
  */
 import { $, M, Mn, P, accion, api, app, esc, fecha, modulo, nf0 } from './comun.js';
+import { vPreguntasModulo } from './preguntas.js';
 import { analizar, interpretar, RUBROS, UMBRAL } from '/motor/ejecucion.js';
 
 const MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -17,7 +18,7 @@ const TOTALES = new Set(['NET', 'MB', 'RO', 'RN']);
 /** % de ejecución, salvo en resultados con presupuesto negativo o cero (ahí se lee la diferencia). */
 const pctTxt = r => (r.pct == null || (r.tipo === 'ingreso' && (r.ppto <= 0 || r.real < 0)) ? '—' : P(r.pct));
 
-const est = { anio: null, hasta: null, unidad: null, abiertos: new Set(), serie: 'NET', modo: 'mes' };
+const est = { anio: null, hasta: null, unidad: null, abiertos: new Set(), serie: 'NET', modo: 'mes', vista: 'tablero' };
 
 export async function pantallaEjecucion(anio) {
   const anios = await api('GET', '/api/ejecucion');
@@ -30,8 +31,16 @@ export async function pantallaEjecucion(anio) {
     <div class="cabeza"><div><div class="miga">Ejecución presupuestal</div><h1>Seguimiento a la ejecución ${anio}</h1>
       <p class="nota">${t.base ? 'Base de comparación: ' + esc(t.base.descripcion) : 'Todavía no hay base de comparación para este año.'}</p></div></div>
     ${lista.length > 1 ? `<nav class="pestanas" aria-label="Años">${lista.map(a => `<a href="#/ejecucion/${a}" ${a === anio ? 'aria-current="page"' : ''}>${a}</a>`).join('')}</nav>` : ''}
+    ${mod.preguntas ? `<div class="botonera" role="group" aria-label="Vista">${[['tablero', 'Tablero'], ['preguntas', 'Preguntas']].map(([k, tt]) => `<button type="button" class="btn chico ${k === est.vista ? 'primario' : ''}" data-vista="${k}" aria-pressed="${k === est.vista}">${tt}</button>`).join('')}</div>` : ''}
     <section id="ej-cuerpo"></section>
     <section id="ej-archivos"></section>`;
+  app.querySelectorAll('[data-vista]').forEach(b => b.onclick = () => { est.vista = b.dataset.vista; pantallaEjecucion(anio); });
+  if (mod.preguntas && est.vista === 'preguntas') return vPreguntasModulo($('#ej-cuerpo'), {
+    titulo: `Preguntas sobre la ejecución ${anio}`,
+    nota: 'El asistente (Claude) responde con lo que muestra el tablero: real contra presupuesto a la fecha por rubro, por mes y por unidad, con sus semáforos. No recibe centros de costos, cuentas, terceros ni nómina por persona.',
+    historial: `/api/preguntas/EJECUCION/${anio}`, enviar: `/api/preguntas/EJECUCION/${anio}`,
+    sugerencias: ['¿Qué rubros se están pasando del presupuesto y por cuánto?', '¿Qué unidad va peor frente al presupuesto y por qué?', '¿Cómo vamos en ingresos netos a la fecha?', '¿Cuál fue el peor mes y qué lo explica?']
+  });
   vArchivos($('#ej-archivos'), t, mod);
   vTablero($('#ej-cuerpo'), t, mod);
 }

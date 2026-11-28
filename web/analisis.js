@@ -7,6 +7,7 @@
  * versión, porque necesitan muchos cálculos (tornado, punto de equilibrio, tablas).
  */
 import { $, ESCS, M, Mn, P, accion, anchos, api, cls, esc, fecha, modulo, nf0, nf1 } from './comun.js';
+import { vPreguntasModulo } from './preguntas.js';
 
 let motor = null;
 const datosBase = new Map();
@@ -285,30 +286,13 @@ export async function vSensibilidad(c, v, escenario) {
    ========================================================= */
 const SUGERENCIAS = ['¿Por qué cambia el EBITDA frente a 2026E?', '¿Qué unidades pierden plata y por qué?', '¿Cuál es el mes más apretado de caja y qué lo explica?', '¿Qué pasa con el resultado en el escenario Pesimista?'];
 
-export async function vPreguntas(c, v, escenario) {
-  const { activo, preguntas } = await api('GET', `/api/presupuesto/versiones/${v.id}/preguntas`);
-  const pintarLista = lista => lista.map(q => `<div class="qa"><div class="qa-msg u"><span class="who">${esc(q.nombre)} · ${fecha(q.fecha)} · ${esc(q.escenario)}</span>${esc(q.pregunta)}</div>
-      <div class="qa-msg"><span class="who">Asistente</span>${esc(q.respuesta)}</div></div>`).join('');
-  c.innerHTML = `<div class="tarjeta"><h2>Preguntas sobre esta versión</h2>
-    <p class="nota">El asistente (Claude) responde con los supuestos y resultados de esta versión: estado de resultados total y por unidad, proyección, mensual y caja de los tres escenarios. No recibe nómina por persona. Las preguntas quedan guardadas y las ve todo el equipo del módulo.</p>
-    ${activo ? '' : '<p class="nota neg">El asistente no está activo en este servidor. Para activarlo, el administrador del servidor debe configurar la llave de la API de Anthropic (ANTHROPIC_API_KEY).</p>'}
-    <div class="qa-log" id="qa-log">${pintarLista(preguntas) || '<p class="nota">Todavía no hay preguntas.</p>'}</div>
-    <form class="qa-form" id="qa-form"><textarea name="q" maxlength="4000" placeholder="Escriba su pregunta" ${activo ? '' : 'disabled'}></textarea><button class="btn primario" type="submit" ${activo ? '' : 'disabled'}>Preguntar</button></form>
-    <div class="qa-sug">${SUGERENCIAS.map(s => `<button class="btn" type="button" ${activo ? '' : 'disabled'}>${esc(s)}</button>`).join('')}</div>
-    <p class="nota">Escenario de la pregunta: ${escenario} (cámbielo arriba).</p></div>`;
-  const f = $('#qa-form');
-  c.querySelectorAll('.qa-sug button').forEach(b => b.onclick = () => { f.q.value = b.textContent; f.q.focus(); });
-  f.onsubmit = async e => {
-    e.preventDefault();
-    const q = f.q.value.trim(); if (!q) return;
-    const btn = f.querySelector('button'); btn.disabled = true; btn.textContent = 'Pensando…';
-    try {
-      const r = await accion(() => api('POST', `/api/presupuesto/versiones/${v.id}/preguntas`, { pregunta: q, escenario }));
-      const log = $('#qa-log'); if (log.querySelector('p.nota')) log.innerHTML = '';
-      log.insertAdjacentHTML('beforeend', pintarLista([{ ...r, nombre: 'Usted', fecha: new Date().toISOString() }]));
-      f.q.value = '';
-    } catch { /* aviso ya mostrado */ } finally { btn.disabled = false; btn.textContent = 'Preguntar'; }
-  };
+export function vPreguntas(c, v, escenario) {
+  return vPreguntasModulo(c, {
+    titulo: 'Preguntas sobre esta versión',
+    nota: 'El asistente (Claude) responde con los supuestos y resultados de esta versión: estado de resultados total y por unidad, proyección, mensual y caja de los tres escenarios. No recibe nómina por persona ni por cargo.',
+    historial: `/api/presupuesto/versiones/${v.id}/preguntas`, enviar: `/api/presupuesto/versiones/${v.id}/preguntas`, cuerpo: { escenario },
+    sugerencias: SUGERENCIAS, pie: `Escenario de la pregunta: ${escenario} (cámbielo arriba).`
+  });
 }
 
 /* =========================================================

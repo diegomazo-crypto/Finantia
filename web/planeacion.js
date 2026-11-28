@@ -8,24 +8,26 @@
  * Después: bancos y extractos mensuales para recalcular la caja hasta fin de año.
  */
 import { $, EERR, ESCS, M, MESES, Mn, P, accion, almacen, api, app, aviso, cls, esc, fecha, kpi, modulo, nf1, sesion, ESTADOS, ROLES } from './comun.js';
+import { vPreguntasModulo } from './preguntas.js';
 
-const VISTAS = [['proforma', 'Proyección y valor'], ['caja', 'Bancos y caja del año'], ['mensual', 'Presupuesto mensual y caja']];
+const VISTAS = [['proforma', 'Proyección y valor'], ['caja', 'Bancos y caja del año'], ['mensual', 'Presupuesto mensual y caja'], ['preguntas', 'Preguntas']];
 export const OBJETIVO = 'Traducir la estrategia operativa de CEIPA en cifras proyectadas para garantizar su solvencia, rentabilidad y sostenibilidad a corto, mediano y largo plazo. Permite anticipar necesidades de liquidez, asignar recursos de manera eficiente y medir el impacto financiero de las decisiones estratégicas antes de ejecutarlas.';
 
 export async function pantallaPlaneacion(anio, versionId) {
-  const v0 = almacen.leer('finantia.plVista'), vista = VISTAS.some(([k]) => k === v0) ? v0 : 'proforma';
+  const mod = modulo('PLANEACION'), vistas = VISTAS.filter(([k]) => k !== 'preguntas' || mod.preguntas);
+  const v0 = almacen.leer('finantia.plVista'), vista = vistas.some(([k]) => k === v0) ? v0 : 'proforma';
   const esc0 = almacen.leer('finantia.escenario');
   const q = new URLSearchParams(); if (anio) q.set('ejercicio', anio); if (versionId) q.set('version', versionId);
   const d = await api('GET', '/api/planeacion/flujo' + (q.size ? '?' + q : ''));
-  const mod = modulo('PLANEACION'), v = d.version;
+  const v = d.version;
   const escenario = ESCS.includes(esc0) ? esc0 : (v?.escenario_oficial || 'Moderado');
   app.innerHTML = `
-    <div class="cabeza"><div><div class="miga">Planeación financiera</div><h1>${vista === 'proforma' ? 'Proyección financiera y creación de valor' + (d.ejercicio ? ' ' + d.ejercicio : '') : vista === 'caja' ? 'Bancos y caja del año' : 'Resultado mensual y flujo de caja' + (d.ejercicio ? ' ' + d.ejercicio : '')}</h1>
+    <div class="cabeza"><div><div class="miga">Planeación financiera</div><h1>${vista === 'preguntas' ? 'Preguntas' + (d.ejercicio ? ' ' + d.ejercicio : '') : vista === 'proforma' ? 'Proyección financiera y creación de valor' + (d.ejercicio ? ' ' + d.ejercicio : '') : vista === 'caja' ? 'Bancos y caja del año' : 'Resultado mensual y flujo de caja' + (d.ejercicio ? ' ' + d.ejercicio : '')}</h1>
       <p class="nota">Su rol: ${esc(ROLES[mod.rol] || 'Superusuario')}${v && vista !== 'caja' ? ` · Fuente: presupuesto ${d.ejercicio}, V${v.numero} · ${esc(v.nombre)} <span class="estado ${v.estado}">${ESTADOS[v.estado]}</span>${v.escenario_oficial ? ' · escenario oficial: ' + v.escenario_oficial : ''}` : ''}</p></div>
       ${v && vista !== 'caja' ? `<div class="acciones" role="group" aria-label="Escenario">${ESCS.map(e => `<button type="button" class="btn ${e === escenario ? 'primario' : ''}" data-esc="${e}" aria-pressed="${e === escenario}">${e}</button>`).join('')}</div>` : ''}
     </div>
     ${d.ejercicios.length && vista !== 'caja' ? `<nav class="pestanas" aria-label="Ejercicios">${d.ejercicios.map(a => `<a href="#/planeacion/${a}" ${a === d.ejercicio ? 'aria-current="page"' : ''}>${a}</a>`).join('')}</nav>` : ''}
-    <div class="botonera" role="group" aria-label="Vista">${VISTAS.map(([k, t]) => `<button type="button" class="btn chico ${k === vista ? 'primario' : ''}" data-vista="${k}" aria-pressed="${k === vista}">${t}</button>`).join('')}</div>
+    <div class="botonera" role="group" aria-label="Vista">${vistas.map(([k, t]) => `<button type="button" class="btn chico ${k === vista ? 'primario' : ''}" data-vista="${k}" aria-pressed="${k === vista}">${t}</button>`).join('')}</div>
     ${d.versiones.length > 1 && vista !== 'caja' ? `<div class="fila-drill"><label>Versión del presupuesto <select id="pl-version">${d.versiones.map(x => `<option value="${x.id}" ${x.id === v?.id ? 'selected' : ''}>V${x.numero} · ${esc(x.nombre)} (${ESTADOS[x.estado]})</option>`).join('')}</select></label>
       <span class="nota">Por defecto se usa la versión aprobada; si no hay, la última.</span></div>` : ''}
     <section id="pl-cuerpo"></section>`;
@@ -37,6 +39,13 @@ export async function pantallaPlaneacion(anio, versionId) {
   if (!d.ejercicios.length) { cuerpo.innerHTML = '<div class="tarjeta"><p class="nota">Todavía no hay ejercicios presupuestales.</p></div>'; return; }
   if (!v || !v.resultados[escenario]) { cuerpo.innerHTML = '<div class="tarjeta"><p class="nota">Este ejercicio todavía no tiene una versión del presupuesto calculada.</p></div>'; return; }
   if (vista === 'mensual') return vMensual(cuerpo, v, escenario);
+  if (vista === 'preguntas') return vPreguntasModulo(cuerpo, {
+    titulo: `Preguntas sobre la planeación financiera ${d.ejercicio}`,
+    nota: 'El asistente (Claude) responde con la proyección proforma 2027–2031, el flujo de caja libre, VPN, TIR, payback, escenarios, sensibilidad, los supuestos de planeación y el flujo de caja mensual del presupuesto. No recibe saldos ni extractos bancarios, ni el pago a CINTANA aparte, ni nómina por persona.',
+    historial: `/api/preguntas/PLANEACION/${d.ejercicio}`, enviar: `/api/preguntas/PLANEACION/${d.ejercicio}`, cuerpo: { escenario },
+    sugerencias: ['¿Qué explica la diferencia de VPN entre escenarios?', '¿Qué variable mueve más el VPN?', '¿En qué año se aprieta la caja y por qué?', '¿Qué pasa con el VPN si la tasa sube a 14%?'],
+    pie: `Escenario de la pregunta: ${escenario} (cámbielo arriba).`
+  });
   const qp = new URLSearchParams({ ejercicio: d.ejercicio, version: v.id, escenario });
   const pf = await api('GET', '/api/planeacion/proforma?' + qp);
   vProforma(cuerpo, pf, { editar: !!mod.editar, recargar: () => pantallaPlaneacion(d.ejercicio, v.id) });

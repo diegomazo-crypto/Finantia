@@ -167,7 +167,7 @@ async function pantallaEjercicios(anio) {
    ========================================================= */
 const PESTANAS = [['resumen', 'Estado de resultados'], ['ingresos', 'Ingresos'], ['unidades', 'Por unidad'], ['costo', 'Costo de prestación'], ['nomina', 'Nómina por cargo', 'sensible'], ['proyeccion', 'Proyección y NPV'], ['sensibilidad', 'Sensibilidad'], ['evaluacion', 'Evaluación del equipo', 'sensible', 2027], ['supuestos', 'Supuestos'], ['preguntas', 'Preguntas'], ['aprobacion', 'Aprobación']];
 /* Nómina por cargo y evaluación: solo con el detalle sensible; la evaluación del equipo existe solo para 2027. */
-const pestanasDe = v => PESTANAS.filter(([, , sens, anio]) => (!sens || modulo('PRESUPUESTO')?.detalleSensible) && (!anio || anio === v.ejercicio));
+const pestanasDe = v => PESTANAS.filter(([k, , sens, anio]) => (!sens || modulo('PRESUPUESTO')?.detalleSensible) && (!anio || anio === v.ejercicio) && (k !== 'preguntas' || modulo('PRESUPUESTO')?.preguntas));
 let cacheVersion = null;
 
 async function pantallaVersion(id, pestana) {
@@ -475,6 +475,7 @@ function vLineas(lineas, v) {
 /* =========================================================
    ADMINISTRACIÓN
    ========================================================= */
+const CON_PREGUNTAS = ['PRESUPUESTO', 'EJECUCION', 'PLANEACION'];
 const ADM = [['usuarios', 'Usuarios y accesos'], ['aprobacion', 'Aprobaciones'], ['bancos', 'Bancos y cuentas'], ['bitacora', 'Bitácora']];
 
 async function pantallaAdmin(seccion) {
@@ -495,11 +496,12 @@ async function aUsuarios(c) {
     if (!edita) return a ? `${ROLES[a.rol]}${a.detalle_sensible ? ' · detalle' : ''}` : '—';
     return `<select data-u="${u.id}" data-m="${m.codigo}" aria-label="Rol de ${esc(u.nombre)} en ${esc(m.nombre)}"><option value="">Sin acceso</option>
       ${Object.entries(ROLES).map(([k, t]) => `<option value="${k}" ${a?.rol === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      ${(m.codigo === 'PRESUPUESTO' || m.codigo === 'EJECUCION') && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" ${a.detalle_sensible ? 'checked' : ''}> detalle sensible (${m.codigo === 'EJECUCION' ? 'centros de costos y cuentas' : 'nómina por cargo y evaluación del equipo'})</label>` : ''}`;
+      ${(m.codigo === 'PRESUPUESTO' || m.codigo === 'EJECUCION') && a ? `<label class="nota"><input type="checkbox" data-sens="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" data-preg="${a.preguntas ? 1 : 0}" ${a.detalle_sensible ? 'checked' : ''}> detalle sensible (${m.codigo === 'EJECUCION' ? 'centros de costos y cuentas' : 'nómina por cargo y evaluación del equipo'})</label>` : ''}
+      ${CON_PREGUNTAS.includes(m.codigo) && a ? `<label class="nota"><input type="checkbox" data-pregu="${u.id}" data-m="${m.codigo}" data-rol="${a.rol}" data-sensv="${a.detalle_sensible ? 1 : 0}" ${a.preguntas ? 'checked' : ''}> Preguntas (asistente)</label>` : ''}`;
   };
   c.innerHTML = `${claves ? `<div class="tarjeta" id="clave-nueva" hidden></div>` : ''}<div class="tarjeta">
     ${claves ? '<p class="nota"><b>Sitio de pruebas:</b> cada persona entra con su correo y una clave personal. Genérela aquí y entréguesela por un canal privado; se muestra una sola vez. Generar una nueva o quitarla cierra sus sesiones abiertas.</p>' : ''}
-    <p class="nota">Cada persona tiene un rol por módulo. Visualización consulta; Administración edita; Aprobación aprueba o devuelve. El detalle de nómina por cargo solo lo ve quien tenga la casilla marcada. Por ahora solo Presupuesto y Administración tienen pantallas; los demás accesos quedan listos para cuando se construyan.</p>
+    <p class="nota">Cada persona tiene un rol por módulo. Visualización consulta; Administración edita; Aprobación aprueba o devuelve. El detalle sensible solo lo ve quien tenga la casilla marcada. La pestaña Preguntas (asistente) de cada módulo solo la ve quien tenga marcada «Preguntas» en ese módulo; el Superusuario la ve siempre.</p>
     <div class="tabla-cont"><table><thead><tr><th>Persona</th><th class="izq">Estado</th>${modsAcc.map(m => `<th class="izq">${esc(m.nombre)}${m.activo ? '' : ' (en pausa)'}</th>`).join('')}${claves ? '<th class="izq">Clave del sitio</th>' : ''}<th class="izq">Último ingreso</th></tr></thead><tbody>
     ${us.map(u => `<tr><td><b>${esc(u.nombre)}</b>${u.es_superusuario ? ' <span class="estado APROBADA">Superusuario</span>' : ''}<div class="nota">${esc(u.correo)}</div></td>
       <td class="izq">${u.activo ? '<span class="estado">Activo</span>' : '<span class="estado inactivo">Inactivo</span>'}
@@ -520,10 +522,13 @@ async function aUsuarios(c) {
     const t = e.target;
     try {
       if (t.matches('select[data-u]')) {
-        await accion(() => t.value ? api('PUT', `/api/admin/usuarios/${t.dataset.u}/accesos/${t.dataset.m}`, { rol: t.value, detalleSensible: false })
+        const prev = us.find(x => x.id === Number(t.dataset.u))?.accesos.find(x => x.modulo === t.dataset.m);
+        await accion(() => t.value ? api('PUT', `/api/admin/usuarios/${t.dataset.u}/accesos/${t.dataset.m}`, { rol: t.value, detalleSensible: !!prev?.detalle_sensible, preguntas: !!prev?.preguntas })
           : api('DELETE', `/api/admin/usuarios/${t.dataset.u}/accesos/${t.dataset.m}`), 'Acceso actualizado');
       } else if (t.matches('input[data-sens]')) {
-        await accion(() => api('PUT', `/api/admin/usuarios/${t.dataset.sens}/accesos/${t.dataset.m}`, { rol: t.dataset.rol, detalleSensible: t.checked }), 'Acceso actualizado');
+        await accion(() => api('PUT', `/api/admin/usuarios/${t.dataset.sens}/accesos/${t.dataset.m}`, { rol: t.dataset.rol, detalleSensible: t.checked, preguntas: t.dataset.preg === '1' }), 'Acceso actualizado');
+      } else if (t.matches('input[data-pregu]')) {
+        await accion(() => api('PUT', `/api/admin/usuarios/${t.dataset.pregu}/accesos/${t.dataset.m}`, { rol: t.dataset.rol, detalleSensible: t.dataset.sensv === '1', preguntas: t.checked }), 'Acceso actualizado');
       } else return;
     } catch { /* aviso ya mostrado */ }
     recargar();

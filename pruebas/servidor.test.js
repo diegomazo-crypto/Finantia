@@ -22,7 +22,7 @@ const actor = id => cargarActor(db, id);
 
 before(async () => {
   db = process.env.FINANTIA_PRUEBA_PG_URL ? await conectar(process.env.FINANTIA_PRUEBA_PG_URL) : desdePGlite(new PGlite());
-  assert.deepEqual(await migrar(db), ['001_administracion.sql', '002_presupuesto.sql', '003_archivos_preguntas.sql', '004_nomina_evaluacion.sql', '005_ejecucion.sql', '006_claves_pruebas.sql', '007_planeacion.sql', '008_bancos_caja.sql']);
+  assert.deepEqual(await migrar(db), ['001_administracion.sql', '002_presupuesto.sql', '003_archivos_preguntas.sql', '004_nomina_evaluacion.sql', '005_ejecucion.sql', '006_claves_pruebas.sql', '007_planeacion.sql', '008_bancos_caja.sql', '009_preguntas_modulos.sql']);
   assert.deepEqual(await migrar(db), [], 'migrar dos veces no repite nada');
   ids.su = await A.inicializarSuperusuario(db, { correo: 'Superusuario@ceipa.edu.co', nombre: 'Superusuario' }, DOM);
   su = await actor(ids.su);
@@ -55,7 +55,7 @@ describe('Administración: usuarios y accesos', () => {
     await rechaza(A.asignarAcceso(db, su, ids.vis, 'PRESUPUESTO', 'JEFE'), 'DATOS_INVALIDOS');
     const lista = await A.listarUsuarios(db, su);
     assert.equal(lista.length, 5);
-    assert.deepEqual(lista.find(u => u.id === ids.adm).accesos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', detalle_sensible: true }]);
+    assert.deepEqual(lista.find(u => u.id === ids.adm).accesos, [{ modulo: 'PRESUPUESTO', rol: 'ADMINISTRACION', detalle_sensible: true, preguntas: false }]);
   });
 
   test('matriz de permisos', async () => {
