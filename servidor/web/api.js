@@ -5,6 +5,7 @@ import * as P from '../presupuesto/servicio.js';
 import * as AR from '../presupuesto/archivos.js';
 import * as EV from '../presupuesto/evaluacion.js';
 import * as PL from '../planeacion/servicio.js';
+import * as BC from '../planeacion/bancos.js';
 import * as EJ from '../ejecucion/servicio.js';
 import * as PR from './pruebas.js';
 import { TAMANO_MAXIMO as NOMINA_MAX } from '../presupuesto/nomina.js';
@@ -115,6 +116,14 @@ export function rutasApi(db, auth, asistente, nomina) {
     ruta('GET', '/api/planeacion/proforma', ({ actor, query }) => PL.proyeccionProforma(db, actor, {
       ejercicio: query.ejercicio ? entero(query.ejercicio) : null, versionId: query.version ? entero(query.version) : null, escenario: query.escenario || null
     })),
+    ruta('GET', '/api/bancos/cuentas', ({ actor }) => BC.listarCuentas(db, actor)),
+    ruta('POST', '/api/bancos/cuentas', ({ actor, body }) => BC.crearCuenta(db, actor, body)),
+    ruta('PUT', '/api/bancos/cuentas/:id', ({ actor, params, body }) => BC.editarCuenta(db, actor, entero(params.id), body)),
+    ruta('GET', '/api/planeacion/caja/:anio', ({ actor, params }) => BC.cajaDelAnio(db, actor, entero(params.anio))),
+    ruta('PUT', '/api/planeacion/caja/:anio/ajustes', ({ actor, params, body }) => BC.guardarAjustes(db, actor, entero(params.anio), body)),
+    ruta('POST', '/api/planeacion/caja/:anio/:mes/cuentas/:cuenta', ({ actor, params, body, headers }) => BC.subirExtracto(db, actor, entero(params.cuenta), entero(params.anio), entero(params.mes), { nombre: nombreDe(headers), contenido: body }), { crudo: BC.TAMANO_MAXIMO }),
+    ruta('PUT', '/api/planeacion/caja/:anio/:mes/cuentas/:cuenta', ({ actor, params, body }) => BC.registrarExtracto(db, actor, entero(params.cuenta), entero(params.anio), entero(params.mes), body)),
+    ruta('DELETE', '/api/planeacion/caja/:anio/:mes/cuentas/:cuenta', ({ actor, params }) => BC.borrarExtracto(db, actor, entero(params.cuenta), entero(params.anio), entero(params.mes))),
     ruta('PUT', '/api/planeacion/supuestos/:anio', ({ actor, params, body }) => PL.guardarSupuestos(db, actor, entero(params.anio), body)),
 
     /* Preguntas al asistente */

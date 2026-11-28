@@ -22,7 +22,7 @@ const actor = id => cargarActor(db, id);
 
 before(async () => {
   db = process.env.FINANTIA_PRUEBA_PG_URL ? await conectar(process.env.FINANTIA_PRUEBA_PG_URL) : desdePGlite(new PGlite());
-  assert.deepEqual(await migrar(db), ['001_administracion.sql', '002_presupuesto.sql', '003_archivos_preguntas.sql', '004_nomina_evaluacion.sql', '005_ejecucion.sql', '006_claves_pruebas.sql', '007_planeacion.sql']);
+  assert.deepEqual(await migrar(db), ['001_administracion.sql', '002_presupuesto.sql', '003_archivos_preguntas.sql', '004_nomina_evaluacion.sql', '005_ejecucion.sql', '006_claves_pruebas.sql', '007_planeacion.sql', '008_bancos_caja.sql']);
   assert.deepEqual(await migrar(db), [], 'migrar dos veces no repite nada');
   ids.su = await A.inicializarSuperusuario(db, { correo: 'Superusuario@ceipa.edu.co', nombre: 'Superusuario' }, DOM);
   su = await actor(ids.su);

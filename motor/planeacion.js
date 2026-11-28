@@ -95,3 +95,39 @@ export function metricasPlaneacion(anios, sup) {
     bajoMinimo: p.filter(a => a.cajaFin < sup.cajaMinima).map(a => a.anio), sinInversion: !(sup.inversionInicial > 0)
   };
 }
+
+/**
+ * Caja del año con los extractos: real hasta el último mes cargado y proyección de los meses que faltan.
+ * @param {object[]} cuentas    [{ id, destinacion: 'LIBRE'|'ESPECIFICA', activa }]
+ * @param {object[]} extractos  [{ cuentaId, mes, saldoInicial, entradas, salidas, saldoFinal }]
+ * @param {number[]} flujo      flujo neto presupuestado por mes (12)
+ * @param {object[]} ajustes    [{ mes, concepto, valor }] entradas (+) o salidas (−) esperadas, se suman al flujo
+ * @param {number}   cajaMinima saldo mínimo deseado de la caja libre
+ * Las cuentas con destinación específica no financian la operación: su saldo se mantiene en la proyección.
+ */
+export function proyectarCaja({ cuentas, extractos, flujo, ajustes = [], cajaMinima = 0 }) {
+  const activas = cuentas.filter(c => c.activa !== false), dest = new Map(cuentas.map(c => [c.id, c.destinacion]));
+  const porMes = Array.from({ length: 12 }, (_, m) => extractos.filter(e => e.mes === m + 1));
+  const ultimo = porMes.reduce((u, xs, m) => (xs.length ? m + 1 : u), 0);
+  const aj = Array.from({ length: 12 }, (_, m) => ajustes.filter(a => a.mes === m + 1).reduce((s, a) => s + Number(a.valor || 0), 0));
+  const meses = []; let libre = null, esp = null;
+  for (let m = 0; m < 12; m++) {
+    const xs = porMes[m], suma = (k, d) => xs.filter(e => !d || dest.get(e.cuentaId) === d).reduce((s, e) => s + Number(e[k]), 0);
+    const ppto = (flujo[m] || 0) + aj[m];
+    if (m < ultimo && xs.length) {
+      const faltan = activas.filter(c => !xs.some(e => e.cuentaId === c.id)).map(c => c.id);
+      libre = suma('saldoFinal', 'LIBRE'); esp = suma('saldoFinal', 'ESPECIFICA');
+      meses.push({ mes: m + 1, tipo: 'real', faltan, inicial: suma('saldoInicial'), entradas: suma('entradas'), salidas: suma('salidas'),
+        flujo: suma('saldoFinal') - suma('saldoInicial'), flujoPpto: flujo[m] || 0, ajuste: aj[m], libre, especifica: esp, total: libre + esp });
+    } else if (m < ultimo) meses.push({ mes: m + 1, tipo: 'sin-dato', flujoPpto: flujo[m] || 0, ajuste: aj[m] });
+    else if (libre == null) meses.push({ mes: m + 1, tipo: 'sin-dato', flujoPpto: flujo[m] || 0, ajuste: aj[m] });
+    else { libre += ppto; meses.push({ mes: m + 1, tipo: 'proyectado', flujo: ppto, flujoPpto: flujo[m] || 0, ajuste: aj[m], libre, especifica: esp, total: libre + esp }); }
+  }
+  const proy = meses.filter(x => x.tipo === 'proyectado'), conSaldo = meses.filter(x => x.libre != null);
+  const minimo = conSaldo.length ? conSaldo.reduce((a, x) => (x.libre < a.libre ? x : a)) : null;
+  return {
+    ultimo, meses, cierre: conSaldo.length ? conSaldo[conSaldo.length - 1] : null,
+    minimo: minimo && { mes: minimo.mes, libre: minimo.libre },
+    bajoMinimo: conSaldo.filter(x => x.libre < cajaMinima).map(x => x.mes), proyectados: proy.map(x => x.mes)
+  };
+}

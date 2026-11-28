@@ -30,7 +30,7 @@ export const TAMANO_MAXIMO = 25 * 1024 * 1024; /* el informe mensual completo pe
 const inflar = (d, max) => inflateRawSync(d, { maxOutputLength: max });
 const json = x => (typeof x === 'string' ? JSON.parse(x) : x);
 
-async function celdasDe(nombre, bytes, op = {}) {
+export async function celdasDe(nombre, bytes, op = {}) {
   if (/\.xlsx$/i.test(nombre) || esZip(bytes)) return leerXlsx(bytes, inflar, op);
   if (!/\.(csv|txt)$/i.test(nombre)) falla(DATOS_INVALIDOS, 'Suba el archivo como Excel (.xlsx) o CSV');
   let t = new TextDecoder().decode(bytes);
@@ -48,7 +48,7 @@ async function datosBase(db, id = null) {
 }
 
 /** Base de comparación del año: { origen, P (12 × línea × unidad), descripcion, datos } o null. */
-async function baseDelAnio(db, anio) {
+export async function baseDelAnio(db, anio) {
   const v = (await db.query(`SELECT id, numero, nombre, datos_base_id, escenario_oficial, aprobada_en FROM version WHERE ejercicio = $1 AND estado = 'APROBADA'`, [anio])).rows[0];
   if (v) {
     const { datos } = await datosBase(db, Number(v.datos_base_id));

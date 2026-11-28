@@ -253,3 +253,9 @@ td.calor.base { outline: 2px solid var(--ink); outline-offset: -2px; font-weight
 .sup-pl label { display: flex; flex-direction: column; gap: 2px; min-width: 150px }
 .sup-pl input { width: 130px }
 #pl-sup table input[type="text"] { width: 180px } #pl-sup table input[type="number"] { width: 110px }
+/* Bancos y caja del año */
+.grafico rect.pos.proy, .grafico rect.neg.proy { opacity: .45 }
+tr.proy td { color: var(--muted); font-style: italic }
+#cta-nueva input[name="terminacion"], tr[data-id] input[name="terminacion"] { width: 70px }
+tr[data-id] input[type="text"] { min-width: 120px }
+table.ext-rej td, table.ext-rej th { text-align: right; white-space: nowrap } table.ext-rej td:first-child, table.ext-rej th:first-child, table.ext-rej td:nth-child(2), table.ext-rej th:nth-child(2) { text-align: left }

@@ -7,9 +7,9 @@
  *  - Resultado mensual y caja: el mismo detalle de Finantia Admon 1.0.
  * Después: bancos y extractos mensuales para recalcular la caja hasta fin de año.
  */
-import { $, EERR, ESCS, M, MESES, Mn, P, accion, almacen, api, app, cls, esc, fecha, kpi, modulo, nf1, ESTADOS, ROLES } from './comun.js';
+import { $, EERR, ESCS, M, MESES, Mn, P, accion, almacen, api, app, aviso, cls, esc, fecha, kpi, modulo, nf1, sesion, ESTADOS, ROLES } from './comun.js';
 
-const VISTAS = [['proforma', 'Proyección y valor'], ['mensual', 'Resultado mensual y caja']];
+const VISTAS = [['proforma', 'Proyección y valor'], ['caja', 'Bancos y caja del año'], ['mensual', 'Presupuesto mensual y caja']];
 export const OBJETIVO = 'Traducir la estrategia operativa de CEIPA en cifras proyectadas para garantizar su solvencia, rentabilidad y sostenibilidad a corto, mediano y largo plazo. Permite anticipar necesidades de liquidez, asignar recursos de manera eficiente y medir el impacto financiero de las decisiones estratégicas antes de ejecutarlas.';
 
 export async function pantallaPlaneacion(anio, versionId) {
@@ -20,19 +20,20 @@ export async function pantallaPlaneacion(anio, versionId) {
   const mod = modulo('PLANEACION'), v = d.version;
   const escenario = ESCS.includes(esc0) ? esc0 : (v?.escenario_oficial || 'Moderado');
   app.innerHTML = `
-    <div class="cabeza"><div><div class="miga">Planeación financiera</div><h1>${vista === 'proforma' ? 'Proyección financiera y creación de valor' : 'Resultado mensual y flujo de caja'}${d.ejercicio ? ' ' + d.ejercicio : ''}</h1>
-      <p class="nota">Su rol: ${esc(ROLES[mod.rol] || 'Superusuario')}${v ? ` · Fuente: presupuesto ${d.ejercicio}, V${v.numero} · ${esc(v.nombre)} <span class="estado ${v.estado}">${ESTADOS[v.estado]}</span>${v.escenario_oficial ? ' · escenario oficial: ' + v.escenario_oficial : ''}` : ''}</p></div>
-      ${v ? `<div class="acciones" role="group" aria-label="Escenario">${ESCS.map(e => `<button type="button" class="btn ${e === escenario ? 'primario' : ''}" data-esc="${e}" aria-pressed="${e === escenario}">${e}</button>`).join('')}</div>` : ''}
+    <div class="cabeza"><div><div class="miga">Planeación financiera</div><h1>${vista === 'proforma' ? 'Proyección financiera y creación de valor' + (d.ejercicio ? ' ' + d.ejercicio : '') : vista === 'caja' ? 'Bancos y caja del año' : 'Resultado mensual y flujo de caja' + (d.ejercicio ? ' ' + d.ejercicio : '')}</h1>
+      <p class="nota">Su rol: ${esc(ROLES[mod.rol] || 'Superusuario')}${v && vista !== 'caja' ? ` · Fuente: presupuesto ${d.ejercicio}, V${v.numero} · ${esc(v.nombre)} <span class="estado ${v.estado}">${ESTADOS[v.estado]}</span>${v.escenario_oficial ? ' · escenario oficial: ' + v.escenario_oficial : ''}` : ''}</p></div>
+      ${v && vista !== 'caja' ? `<div class="acciones" role="group" aria-label="Escenario">${ESCS.map(e => `<button type="button" class="btn ${e === escenario ? 'primario' : ''}" data-esc="${e}" aria-pressed="${e === escenario}">${e}</button>`).join('')}</div>` : ''}
     </div>
-    ${d.ejercicios.length ? `<nav class="pestanas" aria-label="Ejercicios">${d.ejercicios.map(a => `<a href="#/planeacion/${a}" ${a === d.ejercicio ? 'aria-current="page"' : ''}>${a}</a>`).join('')}</nav>` : ''}
+    ${d.ejercicios.length && vista !== 'caja' ? `<nav class="pestanas" aria-label="Ejercicios">${d.ejercicios.map(a => `<a href="#/planeacion/${a}" ${a === d.ejercicio ? 'aria-current="page"' : ''}>${a}</a>`).join('')}</nav>` : ''}
     <div class="botonera" role="group" aria-label="Vista">${VISTAS.map(([k, t]) => `<button type="button" class="btn chico ${k === vista ? 'primario' : ''}" data-vista="${k}" aria-pressed="${k === vista}">${t}</button>`).join('')}</div>
-    ${d.versiones.length > 1 ? `<div class="fila-drill"><label>Versión del presupuesto <select id="pl-version">${d.versiones.map(x => `<option value="${x.id}" ${x.id === v?.id ? 'selected' : ''}>V${x.numero} · ${esc(x.nombre)} (${ESTADOS[x.estado]})</option>`).join('')}</select></label>
+    ${d.versiones.length > 1 && vista !== 'caja' ? `<div class="fila-drill"><label>Versión del presupuesto <select id="pl-version">${d.versiones.map(x => `<option value="${x.id}" ${x.id === v?.id ? 'selected' : ''}>V${x.numero} · ${esc(x.nombre)} (${ESTADOS[x.estado]})</option>`).join('')}</select></label>
       <span class="nota">Por defecto se usa la versión aprobada; si no hay, la última.</span></div>` : ''}
     <section id="pl-cuerpo"></section>`;
   const cuerpo = $('#pl-cuerpo');
   app.querySelectorAll('[data-esc]').forEach(b => b.onclick = () => { almacen.poner('finantia.escenario', b.dataset.esc); pantallaPlaneacion(d.ejercicio, v.id); });
   app.querySelectorAll('[data-vista]').forEach(b => b.onclick = () => { almacen.poner('finantia.plVista', b.dataset.vista); pantallaPlaneacion(d.ejercicio, v?.id); });
   $('#pl-version')?.addEventListener('change', e => { location.hash = `#/planeacion/${d.ejercicio}/${e.target.value}`; });
+  if (vista === 'caja') return vCaja(cuerpo, { editar: !!mod.editar, anios: d.ejercicios });
   if (!d.ejercicios.length) { cuerpo.innerHTML = '<div class="tarjeta"><p class="nota">Todavía no hay ejercicios presupuestales.</p></div>'; return; }
   if (!v || !v.resultados[escenario]) { cuerpo.innerHTML = '<div class="tarjeta"><p class="nota">Este ejercicio todavía no tiene una versión del presupuesto calculada.</p></div>'; return; }
   if (vista === 'mensual') return vMensual(cuerpo, v, escenario);
@@ -177,9 +178,9 @@ function vSupuestos(c, pf, { editar, recargar }) {
 }
 
 /* Gráfico mensual en SVG (sin estilos en línea, por la CSP): barras por mes, una línea y, si se da, una referencia. */
-function graficoMensual({ barras, linea, ref, etiquetaFinal }) {
+function graficoMensual({ barras, linea, ref, etiquetaFinal, proyectados = null }) {
   const W = 760, H = 260, L = 62, R = 14, T = 16, B = 26, bw = (W - L - R) / 12;
-  const vals = [...barras, ...linea, 0, ...(ref != null ? [ref] : [])];
+  const vals = [...barras, ...linea, 0, ...(ref != null ? [ref] : [])].filter(v => v != null);
   let lo = Math.min(...vals), hi = Math.max(...vals); if (hi === lo) hi = lo + 1;
   const paso = (() => { const r = (hi - lo) / 5, e = 10 ** Math.floor(Math.log10(r)), f = r / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * e; })();
   lo = Math.floor(lo / paso) * paso; hi = Math.ceil(hi / paso) * paso;
@@ -188,10 +189,10 @@ function graficoMensual({ barras, linea, ref, etiquetaFinal }) {
   return `<div class="tabla-cont"><svg class="grafico" viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico mensual">
     ${marcas.map(t => `<line class="${Math.abs(t) < paso / 2 ? 'eje cero' : 'eje'}" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text class="tick" x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${Mn(t)}</text>`).join('')}
     ${ref != null ? `<line class="ref" x1="${L}" x2="${W - R}" y1="${y(ref)}" y2="${y(ref)}"/>` : ''}
-    ${barras.map((b, m) => `<rect class="${b < 0 ? 'neg' : 'pos'}" x="${L + m * bw + bw * 0.25}" y="${y(Math.max(0, b))}" width="${bw * 0.5}" height="${Math.max(1, Math.abs(y(b) - y(0)))}" rx="2"/><text class="tick" x="${x(m)}" y="${H - 8}" text-anchor="middle">${MESES[m]}</text>`).join('')}
-    <polyline class="linea" points="${linea.map((v, m) => `${x(m)},${y(v)}`).join(' ')}"/>
-    ${linea.map((v, m) => `<circle class="punto" cx="${x(m)}" cy="${y(v)}" r="3"/>`).join('')}
-    ${etiquetaFinal ? `<text class="final" x="${x(11)}" y="${y(linea[11]) - 12}" text-anchor="middle">${Mn(linea[11])}</text>` : ''}
+    ${barras.map((b, m) => b == null ? `<text class="tick" x="${x(m)}" y="${H - 8}" text-anchor="middle">${MESES[m]}</text>` : `<rect class="${b < 0 ? 'neg' : 'pos'}${proyectados?.includes(m + 1) ? ' proy' : ''}" x="${L + m * bw + bw * 0.25}" y="${y(Math.max(0, b))}" width="${bw * 0.5}" height="${Math.max(1, Math.abs(y(b) - y(0)))}" rx="2"/><text class="tick" x="${x(m)}" y="${H - 8}" text-anchor="middle">${MESES[m]}</text>`).join('')}
+    <polyline class="linea" points="${linea.map((v, m) => (v == null ? '' : `${x(m)},${y(v)}`)).filter(Boolean).join(' ')}"/>
+    ${linea.map((v, m) => (v == null ? '' : `<circle class="punto" cx="${x(m)}" cy="${y(v)}" r="3"/>`)).join('')}
+    ${etiquetaFinal && linea[11] != null ? `<text class="final" x="${x(11)}" y="${y(linea[11]) - 12}" text-anchor="middle">${Mn(linea[11])}</text>` : ''}
   </svg></div>`;
 }
 const leyenda = xs => `<div class="leyenda">${xs.map(([k, t]) => `<span><b class="${k}"></b>${t}</span>`).join('')}</div>`;
@@ -224,4 +225,138 @@ export function vMensual(c, v, escenario) {
     <div class="tabla-cont"><table><thead><tr><th>Concepto</th>${MESES.map(x => `<th>${x}</th>`).join('')}<th>Año</th></tr></thead><tbody>
     ${caja.map(([k, t, tipo]) => `<tr class="${tipo || ''}"><td>${t}</td>${cj.map(x => `<td class="${cls(x[k])}">${Mn(x[k])}</td>`).join('')}<td class="${cls(totCaja(k))}">${Mn(totCaja(k))}</td></tr>`).join('')}
     </tbody></table></div></div>`;
+}
+
+/* ---------- Bancos y caja del año: extractos mensuales y proyección hasta diciembre ---------- */
+const MESES_L = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+const TIPOS_CTA = { AHORROS: 'Ahorros', CORRIENTE: 'Corriente', FIDUCIA: 'Fiducia / cartera colectiva', INVERSION: 'Inversión (CDT u otra)', OTRA: 'Otra' };
+const nomCuenta = c => `${esc(c.banco)} · ${esc(c.nombre)}${c.terminacion ? ' ··' + esc(c.terminacion) : ''}`;
+const enM = v => Math.round(Number(v || 0) / 1e6 * 100) / 100;
+
+export async function vCaja(c, { editar, anios }) {
+  const actual = new Date().getFullYear();
+  const lista = [...new Set([actual, ...anios])].sort((a, b) => a - b);
+  const a0 = Number(almacen.leer('finantia.plCajaAnio')), anio = lista.includes(a0) ? a0 : actual;
+  const d = await api('GET', `/api/planeacion/caja/${anio}`);
+  const k = d.caja, libres = d.cuentas.filter(x => x.destinacion === 'LIBRE'), esps = d.cuentas.filter(x => x.destinacion === 'ESPECIFICA');
+  const ult = k.ultimo ? k.meses[k.ultimo - 1] : null, cierre = k.cierre;
+  const ext = (cid, m) => d.extractos.find(e => e.cuentaId === cid && e.mes === m);
+  const adm = sesion.perfil.admin.editar;
+  c.innerHTML = `
+    <nav class="pestanas" aria-label="Años">${lista.map(a => `<a href="#" data-anio="${a}" ${a === anio ? 'aria-current="page"' : ''}>${a}</a>`).join('')}</nav>
+    <div class="tarjeta objetivo"><h2>Caja ${anio}: real con los extractos y proyectada hasta diciembre</h2>
+      <p class="nota">Cada mes se cargan los extractos de todas las cuentas. La caja real llega hasta el último mes cargado; de ahí a diciembre se proyecta la caja libre con el flujo presupuestado y los ajustes esperados. Las cuentas con destinación específica no financian la operación: su saldo se muestra aparte y se mantiene en la proyección.</p>
+      <p class="nota"><b>Flujo presupuestado:</b> ${esc(d.fuente)}.${d.aproximado ? ' Es una aproximación por causación (no incluye el calendario de recaudo ni de pagos como la prima): use los ajustes para lo que ya se sabe que entra o sale.' : ''}</p></div>
+    ${!d.cuentas.length ? `<div class="tarjeta"><p>Todavía no hay cuentas bancarias registradas. ${adm ? 'Regístrelas en <a href="#/admin/bancos">Administración › Bancos y cuentas</a>, con su destinación.' : 'Pídale a quien administra Finantia que las registre en Administración › Bancos y cuentas.'}</p></div>` : `
+    <div class="kpis">
+      ${ult ? kpi(`Caja libre a ${MESES_L[k.ultimo - 1]}`, ult.libre, ult.faltan.length ? `faltan ${ult.faltan.length} cuenta(s) por cargar` : 'todas las cuentas cargadas') : `<div class="kpi"><small>Caja libre</small><b>Sin extractos</b><small>cargue el último mes cerrado</small></div>`}
+      ${ult ? kpi('Destinación específica', ult.especifica, `${esps.length} cuenta(s)`) : ''}
+      ${cierre && cierre.mes === 12 && k.proyectados.length ? kpi('Caja libre proyectada a diciembre', cierre.libre, `total con específica ${M(cierre.total)}`) : ''}
+      ${k.minimo ? kpi('Mínimo de la caja libre', k.minimo.libre, `${MESES_L[k.minimo.mes - 1]} · mínimo deseado ${M(d.cajaMinima)}`) : ''}
+    </div>
+    ${k.bajoMinimo.length ? `<div class="aviso-linea alerta-est">La caja libre queda por debajo del mínimo deseado (${M(d.cajaMinima)}) en ${k.bajoMinimo.map(m => MESES_L[m - 1]).join(', ')}.</div>` : ''}
+    ${ult ? `<div class="tarjeta"><h3>Caja libre mes a mes</h3>
+      ${graficoMensual({ barras: k.meses.map(x => x.tipo === 'sin-dato' ? null : x.flujo), linea: k.meses.map(x => x.libre ?? null), ref: d.cajaMinima, etiquetaFinal: true, proyectados: k.proyectados })}
+      ${leyenda([['pos', 'Flujo del mes (real o proyectado, claro)'], ['neg', 'Flujo negativo'], ['linea', 'Caja libre al cierre'], ['ref', `Mínimo deseado (${M(d.cajaMinima)})`]])}</div>` : ''}
+    <div class="tarjeta"><h3>Detalle por mes</h3><p class="nota">Millones de pesos. En los meses reales, la diferencia compara el flujo de los extractos con el presupuestado.</p>
+      <div class="tabla-cont"><table><thead><tr><th>Mes</th><th>Estado</th><th>Flujo presupuestado</th><th>Ajustes</th><th>Flujo real o proyectado</th><th>Diferencia</th><th>Caja libre</th><th>Destinación específica</th><th>Total bancos</th></tr></thead><tbody>
+      ${k.meses.map(x => `<tr class="${x.tipo === 'proyectado' ? 'proy' : ''}"><td>${MESES[x.mes - 1]}</td><td>${x.tipo === 'real' ? 'Real' + (x.faltan.length ? ' (incompleto)' : '') : x.tipo === 'proyectado' ? 'Proyectado' : '—'}</td>
+        <td class="${cls(x.flujoPpto)}">${Mn(x.flujoPpto)}</td><td class="${cls(x.ajuste)}">${x.ajuste ? Mn(x.ajuste) : ''}</td><td class="${cls(x.flujo)}">${x.flujo == null ? '' : Mn(x.flujo)}</td>
+        <td class="${cls(x.tipo === 'real' ? x.flujo - x.flujoPpto - x.ajuste : 0)}">${x.tipo === 'real' ? Mn(x.flujo - x.flujoPpto - x.ajuste) : ''}</td>
+        <td class="${cls(x.libre)}">${x.libre == null ? '' : Mn(x.libre)}</td><td>${x.especifica == null ? '' : Mn(x.especifica)}</td><td class="${cls(x.total)}">${x.total == null ? '' : Mn(x.total)}</td></tr>`).join('')}
+      </tbody></table></div></div>
+    <div class="tarjeta"><h3>Extractos cargados ${anio}</h3><p class="nota">Saldo final de cada cuenta por mes, en millones de pesos. ${editar ? 'Clic en un saldo para borrarlo (pide confirmación).' : ''}</p>
+      <div class="tabla-cont"><table class="ext-rej"><thead><tr><th>Cuenta</th><th>Destinación</th>${MESES.map(m => `<th>${m}</th>`).join('')}</tr></thead><tbody>
+      ${[...libres, ...esps].map(cta => `<tr><td>${nomCuenta(cta)}${cta.activa ? '' : ' <small class="nota">(inactiva)</small>'}</td><td>${cta.destinacion === 'LIBRE' ? 'Libre' : `<span title="${esc(cta.detalle)}">Específica</span>`}</td>
+        ${MESES.map((_, m) => { const e = ext(cta.id, m + 1); return `<td>${e ? (editar ? `<button type="button" class="btn chico" data-borrar="${cta.id}-${m + 1}" title="${esc(e.origen)} · ${esc(e.cargadoPor)}">${Mn(e.saldoFinal)}</button>` : `<span title="${esc(e.origen)}">${Mn(e.saldoFinal)}</span>`) : '·'}</td>`; }).join('')}</tr>`).join('')}
+      </tbody></table></div></div>
+    ${editar ? `<div class="tarjeta"><h3>Cargar el extracto de un mes</h3>
+      <p class="nota">Suba el Excel o CSV que descarga del portal del banco (se lee la fecha, el valor o débitos y créditos, y el saldo). Si el banco solo da PDF, registre los saldos a mano. Solo se guardan los saldos y los totales del mes, no los movimientos.</p>
+      <form id="pl-ext" class="formfila sup-pl">
+        <label>Cuenta<select name="cuenta">${d.cuentas.filter(x => x.activa).map(x => `<option value="${x.id}">${nomCuenta(x)}</option>`).join('')}</select></label>
+        <label>Mes<select name="mes">${MESES_L.map((m, i) => `<option value="${i + 1}" ${i + 1 === Math.max(1, (k.ultimo || new Date().getMonth()))  ? 'selected' : ''}>${m}</option>`).join('')}</select></label>
+        <label>Archivo del banco<input type="file" name="archivo" accept=".xlsx,.csv,.txt"></label>
+        <button type="submit" class="btn primario">Subir archivo</button>
+      </form>
+      <details><summary>Registrar los saldos a mano (millones de pesos)</summary>
+      <form id="pl-man" class="formfila sup-pl">
+        <label>Saldo inicial<input type="number" step="0.01" name="saldoInicial" required></label>
+        <label>Entradas<input type="number" step="0.01" name="entradas"></label>
+        <label>Salidas<input type="number" step="0.01" name="salidas"></label>
+        <label>Saldo final<input type="number" step="0.01" name="saldoFinal" required></label>
+        <button type="submit" class="btn">Guardar saldos</button>
+      </form><p class="nota">Usa la cuenta y el mes elegidos arriba. Si deja entradas y salidas vacías, se toma la diferencia de saldos.</p></details></div>` : ''}
+    <div class="tarjeta" id="pl-aj"></div>`}`;
+  c.querySelectorAll('[data-anio]').forEach(b => b.onclick = ev => { ev.preventDefault(); almacen.poner('finantia.plCajaAnio', b.dataset.anio); vCaja(c, { editar, anios }); });
+  if (!d.cuentas.length) return;
+  const recargar = () => vCaja(c, { editar, anios });
+  vAjustes($('#pl-aj'), d, { editar, recargar });
+  if (!editar) return;
+  const f = $('#pl-ext'), sel = () => ({ cuenta: f.cuenta.value, mes: f.mes.value });
+  f.onsubmit = async ev => {
+    ev.preventDefault(); const a = f.archivo.files[0]; if (!a) return aviso('Elija el archivo del extracto', true);
+    const { cuenta, mes } = sel();
+    try { await accion(() => api('POST', `/api/planeacion/caja/${anio}/${mes}/cuentas/${cuenta}`, a, { cab: { 'X-Nombre': encodeURIComponent(a.name) } }), 'Extracto cargado'); await recargar(); } catch { /* aviso ya mostrado */ }
+  };
+  $('#pl-man').onsubmit = async ev => {
+    ev.preventDefault(); const g = new FormData(ev.target), n = k => (g.get(k) === '' ? null : Number(g.get(k)) * 1e6);
+    const { cuenta, mes } = sel();
+    try { await accion(() => api('PUT', `/api/planeacion/caja/${anio}/${mes}/cuentas/${cuenta}`, { saldoInicial: n('saldoInicial'), entradas: n('entradas'), salidas: n('salidas'), saldoFinal: n('saldoFinal') }), 'Saldos guardados'); await recargar(); } catch { /* */ }
+  };
+  c.querySelectorAll('[data-borrar]').forEach(b => b.onclick = async () => {
+    if (b.dataset.confirmar !== '1') { b.dataset.confirmar = '1'; b.textContent = '¿Borrar?'; setTimeout(() => { if (b.isConnected) { b.dataset.confirmar = ''; recargar(); } }, 4000); return; }
+    const [cuenta, mes] = b.dataset.borrar.split('-');
+    try { await accion(() => api('DELETE', `/api/planeacion/caja/${anio}/${mes}/cuentas/${cuenta}`), 'Extracto borrado'); await recargar(); } catch { /* */ }
+  });
+}
+
+function vAjustes(c, d, { editar, recargar }) {
+  const aj = d.ajustes.map(a => ({ ...a })), dis = editar ? '' : 'disabled';
+  const pintar = () => {
+    c.innerHTML = `<h3>Ajustes esperados a la proyección</h3>
+      <p class="nota">Entradas (+) o salidas (−) que ya se conocen y no están en el flujo presupuestado: por ejemplo la prima de diciembre, el recaudo anticipado de matrículas, un pago de capital o una inversión. Millones de pesos.</p>
+      ${aj.length ? `<div class="tabla-cont"><table><thead><tr><th>Mes</th><th>Concepto</th><th>Valor (M)</th>${editar ? '<th></th>' : ''}</tr></thead><tbody>
+      ${aj.map((a, i) => `<tr><td><select data-a="${i}" data-k="mes" ${dis}>${MESES_L.map((m, j) => `<option value="${j + 1}" ${a.mes === j + 1 ? 'selected' : ''}>${m}</option>`).join('')}</select></td>
+        <td><input type="text" data-a="${i}" data-k="concepto" value="${esc(a.concepto)}" ${dis}></td><td><input type="number" step="0.01" data-a="${i}" data-k="valor" value="${enM(a.valor)}" ${dis}></td>
+        ${editar ? `<td><button type="button" class="btn chico" data-quitar="${i}">Quitar</button></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '<p class="nota">Sin ajustes.</p>'}
+      ${editar ? '<div class="acciones"><button type="button" class="btn" id="aj-mas">Agregar ajuste</button><button type="button" class="btn primario" id="aj-guardar">Guardar y recalcular</button></div>' : ''}`;
+    if (!editar) return;
+    const leer = () => c.querySelectorAll('[data-a]').forEach(i => { const a = aj[Number(i.dataset.a)], k = i.dataset.k; a[k] = k === 'concepto' ? i.value : k === 'mes' ? Number(i.value) : Number(i.value) * 1e6; });
+    $('#aj-mas').onclick = () => { leer(); aj.push({ mes: Math.min(12, (d.caja.ultimo || 0) + 1), concepto: '', valor: 0 }); pintar(); };
+    c.querySelectorAll('[data-quitar]').forEach(b => b.onclick = () => { leer(); aj.splice(Number(b.dataset.quitar), 1); pintar(); });
+    $('#aj-guardar').onclick = async () => { leer(); try { await accion(() => api('PUT', `/api/planeacion/caja/${d.anio}/ajustes`, { ajustes: aj }), 'Ajustes guardados'); await recargar(); } catch { /* */ } };
+  };
+  pintar();
+}
+
+/* Administración › Bancos y cuentas: registro con su destinación */
+export async function aBancos(c) {
+  const cuentas = await api('GET', '/api/bancos/cuentas'), edita = sesion.perfil.admin.editar, dis = edita ? '' : 'disabled';
+  const opt = (o, v) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${t}</option>`).join('');
+  const DEST = { LIBRE: 'Libre (financia la operación)', ESPECIFICA: 'Destinación específica' };
+  c.innerHTML = `<div class="tarjeta"><p class="nota">Cuentas bancarias de CEIPA. La destinación define si el saldo cuenta como caja libre para la operación o si está reservado para un fin específico (por ejemplo fondos de un convenio, becas o un crédito). Del número de cuenta se guardan solo los últimos 4 dígitos.</p>
+    <div class="tabla-cont"><table><thead><tr><th>Banco</th><th>Nombre</th><th>Tipo</th><th>Terminación</th><th>Destinación</th><th>Para qué (si es específica)</th><th>Activa</th>${edita ? '<th></th>' : ''}</tr></thead><tbody>
+    ${cuentas.map(x => `<tr data-id="${x.id}"><td><input type="text" name="banco" value="${esc(x.banco)}" ${dis}></td><td><input type="text" name="nombre" value="${esc(x.nombre)}" ${dis}></td>
+      <td><select name="tipo" ${dis}>${opt(TIPOS_CTA, x.tipo)}</select></td><td><input type="text" name="terminacion" maxlength="4" inputmode="numeric" value="${esc(x.terminacion)}" ${dis}></td>
+      <td><select name="destinacion" ${dis}>${opt(DEST, x.destinacion)}</select></td><td><input type="text" name="detalle" value="${esc(x.detalle)}" ${dis}></td>
+      <td><input type="checkbox" name="activa" ${x.activa ? 'checked' : ''} ${dis}></td>${edita ? '<td><button type="button" class="btn chico" data-guardar>Guardar</button></td>' : ''}</tr>`).join('') || `<tr><td colspan="8" class="nota">Sin cuentas registradas.</td></tr>`}
+    </tbody></table></div></div>
+    ${edita ? `<div class="tarjeta"><h3>Agregar una cuenta</h3><form id="cta-nueva" class="formfila sup-pl">
+      <label>Banco<input type="text" name="banco" required placeholder="Bancolombia"></label>
+      <label>Nombre<input type="text" name="nombre" required placeholder="Recaudo matrículas"></label>
+      <label>Tipo<select name="tipo">${opt(TIPOS_CTA, 'AHORROS')}</select></label>
+      <label>Últimos 4 dígitos<input type="text" name="terminacion" maxlength="4" inputmode="numeric"></label>
+      <label>Destinación<select name="destinacion">${opt(DEST, 'LIBRE')}</select></label>
+      <label>Para qué (si es específica)<input type="text" name="detalle"></label>
+      <button type="submit" class="btn primario">Agregar</button></form></div>` : ''}`;
+  if (!edita) return;
+  const datos = el => Object.fromEntries([...el.querySelectorAll('[name]')].map(i => [i.name, i.type === 'checkbox' ? i.checked : i.value]));
+  c.querySelectorAll('[data-guardar]').forEach(b => b.onclick = async () => {
+    const tr = b.closest('tr');
+    try { await accion(() => api('PUT', `/api/bancos/cuentas/${tr.dataset.id}`, datos(tr)), 'Cuenta actualizada'); aBancos(c); } catch { /* */ }
+  });
+  $('#cta-nueva').onsubmit = async ev => {
+    ev.preventDefault();
+    try { await accion(() => api('POST', '/api/bancos/cuentas', datos(ev.target)), 'Cuenta agregada'); aBancos(c); } catch { /* */ }
+  };
 }

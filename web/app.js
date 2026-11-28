@@ -2,7 +2,7 @@
 
 import { vIngresos, vCosto, vSensibilidad, vPreguntas, vArchivos, detalleLineas } from './analisis.js';
 import { vNomina, vEvaluacion } from './sensible.js';
-import { pantallaPlaneacion } from './planeacion.js';
+import { pantallaPlaneacion, aBancos } from './planeacion.js';
 import { pantallaEjecucion } from './ejecucion.js';
 import { $, ACCIONES, EERR, ESCS, ESTADOS, M, MESES, Mn, P, ROLES, accion, almacen, anchos, api, app, aviso, cls, esc, fecha, ganchos, kpi, modulo, nf0, nf1, sesion } from './comun.js';
 
@@ -475,13 +475,13 @@ function vLineas(lineas, v) {
 /* =========================================================
    ADMINISTRACIÓN
    ========================================================= */
-const ADM = [['usuarios', 'Usuarios y accesos'], ['aprobacion', 'Aprobaciones'], ['bitacora', 'Bitácora']];
+const ADM = [['usuarios', 'Usuarios y accesos'], ['aprobacion', 'Aprobaciones'], ['bancos', 'Bancos y cuentas'], ['bitacora', 'Bitácora']];
 
 async function pantallaAdmin(seccion) {
   app.innerHTML = `<div class="cabeza"><div><div class="miga">Administración</div><h1>${esc((ADM.find(a => a[0] === seccion) || ADM[0])[1])}</h1></div></div>
     <nav class="pestanas" aria-label="Secciones">${ADM.map(([k, t]) => `<a href="#/admin/${k}" ${k === seccion ? 'aria-current="page"' : ''}>${t}</a>`).join('')}</nav>
     <section id="cuerpo"></section>`;
-  const fn = { usuarios: aUsuarios, aprobacion: aAprobacion, bitacora: aBitacora }[seccion] || aUsuarios;
+  const fn = { usuarios: aUsuarios, aprobacion: aAprobacion, bancos: aBancos, bitacora: aBitacora }[seccion] || aUsuarios;
   await fn($('#cuerpo'));
 }
 

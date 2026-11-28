@@ -13,11 +13,11 @@
 import { falla, DATOS_INVALIDOS } from '../errores.js';
 import { signoBalance } from '../../motor/ejecucion.js';
 
-const normal = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+export const normal = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 const texto = v => (v == null ? '' : typeof v === 'number' ? (Number.isInteger(v) ? String(v) : String(v)) : String(v)).trim();
 export const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 
-function numero(v) {
+export function numero(v) {
   if (typeof v === 'number') return v;
   if (v && v.sinValor) falla(DATOS_INVALIDOS, `La celda ${v.ref} tiene una fórmula sin valor calculado. Abra el archivo en Excel, guárdelo y vuelva a subirlo.`);
   let x = String(v ?? '').replace(/[$\s ]/g, '');
@@ -42,7 +42,7 @@ const COL_BAL = {
   sAnt: ['saldo_anterior', 'saldo_inicial'], sFin: ['saldo_final', 'saldo_actual', 'nuevo_saldo', 'saldo'],
   nit: ['nit', 'tercero', 'nit_tercero', 'identificacion']
 };
-const columnas = (fila, def) => { const enc = fila.map(normal), col = {}; for (const [k, a] of Object.entries(def)) { const i = enc.findIndex(x => a.includes(x)); if (i >= 0) col[k] = i; } return col; };
+export const columnas = (fila, def) => { const enc = fila.map(normal), col = {}; for (const [k, a] of Object.entries(def)) { const i = enc.findIndex(x => a.includes(x)); if (i >= 0) col[k] = i; } return col; };
 
 /**
  * @param {Array<Array<string|number>>} celdas  filas del archivo
