@@ -10,7 +10,7 @@ export const ROLES = { VISUALIZACION: 'Visualización', ADMINISTRACION: 'Adminis
 export const ACCIONES = {
   INGRESO: 'Ingresó', CREAR_USUARIO: 'Creó un usuario', ACTIVAR_USUARIO: 'Activó un usuario', DESACTIVAR_USUARIO: 'Desactivó un usuario', CAMBIAR_ACTIVO: 'Cambió el estado de un usuario',
   ASIGNAR_ACCESO: 'Asignó un acceso', QUITAR_ACCESO: 'Quitó un acceso', CONFIGURAR_APROBACION: 'Configuró la aprobación',
-  CARGAR_DATOS_BASE: 'Cargó datos base', CREAR_EJERCICIO: 'Abrió un ejercicio', CREAR_VERSION: 'Creó la versión', EDITAR_SUPUESTOS: 'Editó supuestos',
+  CARGAR_DATOS_BASE: 'Cargó datos base', CREAR_EJERCICIO: 'Abrió un ejercicio', CREAR_VERSION: 'Creó la versión', EDITAR_SUPUESTOS: 'Editó supuestos', EDITAR_SUPUESTOS_PLANEACION: 'Editó supuestos de planeación',
   ENVIAR_REVISION: 'Envió a revisión', APROBAR: 'Aprobó', DEVOLVER: 'Devolvió', VERSION_APROBADA: 'La versión quedó aprobada', REEMPLAZAR: 'Quedó reemplazada', CAMBIAR_SUPERUSUARIO: 'Cambió superusuario', INICIALIZAR: 'Inicializó Finantia',
   SUBIR_ARCHIVO: 'Subió un archivo', RETIRAR_ARCHIVO: 'Retiró un archivo', PREGUNTAR: 'Preguntó al asistente',
   SUBIR_NOMINA: 'Cargó la nómina por cargo', VER_NOMINA: 'Consultó la nómina por cargo', RETIRAR_NOMINA: 'Retiró la nómina por cargo', CARGAR_EVALUACION: 'Cargó la evaluación del equipo',

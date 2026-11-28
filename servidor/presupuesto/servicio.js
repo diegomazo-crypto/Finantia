@@ -134,7 +134,7 @@ async function completarDatos(datos) {
   return datos;
 }
 
-async function modeloDe(t, version) {
+export async function modeloDe(t, version) {
   const base = (await t.query('SELECT contenido FROM datos_base WHERE id = $1', [version.datos_base_id])).rows[0];
   const datos = await completarDatos(typeof base.contenido === 'string' ? JSON.parse(base.contenido) : base.contenido);
   return { datos, modelo: crearModelo(datos, version.supuestos || {}) };

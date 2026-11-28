@@ -236,6 +236,40 @@ describe('Motor en el navegador y datos base', () => {
     await ok(pedir('PUT', `/api/admin/usuarios/${con.id}/accesos/PLANEACION`, { como: U.su, cuerpo: { rol: 'VISUALIZACION' } }));
   });
 
+  test('planeación financiera: proforma a 5 años, VPN por escenario, sensibilidad y supuestos editables', async () => {
+    const d = await ok(pedir('GET', '/api/planeacion/proforma?escenario=Moderado', { como: U.con }));
+    assert.equal(d.ejercicio, 2027); assert.equal(d.escenario, 'Moderado');
+    assert.equal(d.supuestos.tasa, 0.12);
+    const v = await ok(pedir('GET', `/api/presupuesto/versiones/${d.version.id}`, { como: U.adm }));
+    for (const e of ['Pesimista', 'Moderado', 'Optimista']) {
+      const x = d.escenarios[e];
+      assert.equal(x.anios.length, 6); assert.deepEqual(x.anios.map(a => a.anio), [2026, 2027, 2028, 2029, 2030, 2031]);
+      // con los supuestos por defecto el VPN es el mismo de la pestaña Proyección y NPV del presupuesto
+      assert.ok(Math.abs(x.metricas.vpn - v.resultados[e].metricas.npv) < 1, e);
+      assert.equal(x.anios[1].FX, undefined, 'CINTANA no va aparte');
+    }
+    const S = d.sensibilidad;
+    assert.equal(S.vpnCrecDesc.length, 5); assert.equal(S.vpnTasaCapex[2].length, 5);
+    assert.ok(Math.abs(S.vpnCrecDesc[2][2] - d.escenarios.Moderado.metricas.vpn) < 1, 'el centro es el caso base');
+    assert.ok(S.vpnCrecDesc[4][2] > S.vpnCrecDesc[0][2], 'más estudiantes, más VPN');
+    assert.ok(S.vpnCrecDesc[2][4] < S.vpnCrecDesc[2][0], 'más descuento, menos VPN');
+    assert.ok(S.vpnTasaCapex[0][2] > S.vpnTasaCapex[4][2], 'más tasa, menos VPN');
+    // solo quien edita Planeación cambia los supuestos
+    const nuevo = { ...d.supuestos, inversionInicial: 3000e6, deuda: [{ nombre: 'Crédito de prueba', saldo: 1000e6, tasa: 0.1, anios: 4 }] };
+    assert.equal((await pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.con, cuerpo: nuevo })).status, 403);
+    assert.equal((await pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.adm, cuerpo: { ...nuevo, gT: 0.2 } })).status, 422);
+    await ok(pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.adm, cuerpo: nuevo }));
+    const d2 = await ok(pedir('GET', '/api/planeacion/proforma', { como: U.con }));
+    const m = d2.escenarios.Moderado;
+    assert.ok(Math.abs(m.metricas.vpn - (d.escenarios.Moderado.metricas.vpn - 3000e6)) < 1, 'la inversión inicial va en el año 0');
+    assert.ok(m.metricas.tir != null && m.metricas.paybackSimple != null, 'con inversión hay TIR y payback');
+    assert.ok(Math.abs(m.anios.slice(1).reduce((t, a) => t + a.CAPd, 0) - 1000e6) < 1, 'la deuda se paga en el plazo');
+    assert.equal(m.anios[5].DEUDA, 0);
+    const bit = await ok(pedir('GET', '/api/admin/bitacora', { como: U.su }));
+    assert.ok((bit.filas || bit).some(b => b.accion === 'EDITAR_SUPUESTOS_PLANEACION'));
+    await ok(pedir('PUT', '/api/planeacion/supuestos/2027', { como: U.adm, cuerpo: {} }));
+  });
+
   test('TRM: cambia el pago a CINTANA y el puente del excedente cuadra', async () => {
     const { id } = await ok(pedir('POST', '/api/presupuesto/versiones', { como: U.adm, cuerpo: { ejercicio: 2027, nombre: 'TRM' } }));
     const v0 = await ok(pedir('GET', `/api/presupuesto/versiones/${id}`, { como: U.adm }));

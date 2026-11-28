@@ -112,6 +112,10 @@ export function rutasApi(db, auth, asistente, nomina) {
     ruta('GET', '/api/planeacion/flujo', ({ actor, query }) => PL.flujoDeCaja(db, actor, {
       ejercicio: query.ejercicio ? entero(query.ejercicio) : null, versionId: query.version ? entero(query.version) : null
     })),
+    ruta('GET', '/api/planeacion/proforma', ({ actor, query }) => PL.proyeccionProforma(db, actor, {
+      ejercicio: query.ejercicio ? entero(query.ejercicio) : null, versionId: query.version ? entero(query.version) : null, escenario: query.escenario || null
+    })),
+    ruta('PUT', '/api/planeacion/supuestos/:anio', ({ actor, params, body }) => PL.guardarSupuestos(db, actor, entero(params.anio), body)),
 
     /* Preguntas al asistente */
     ruta('GET', '/api/presupuesto/versiones/:id/preguntas', async ({ actor, params }) => ({ activo: asistente.activo, preguntas: await asistente.historial(db, actor, entero(params.id)) })),

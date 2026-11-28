@@ -235,3 +235,21 @@ svg.grafico .p-real { fill: var(--accent) } svg.grafico .p-real.est { fill: var(
 .tip p { margin: 6px 0 2px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em }
 .tip div { display: flex; justify-content: space-between; gap: 14px } .tip b.pos { color: var(--pos) } .tip b.neg { color: var(--neg) }
 .clave-mostrada code { font-size: 18px; letter-spacing: .05em; background: var(--sunk); padding: 6px 10px; border-radius: 6px; user-select: all }
+
+/* Planeación financiera · proyección y valor */
+.objetivo { border-left: 4px solid var(--accent) }
+.objetivo > p:first-of-type { font-size: 15px; line-height: 1.5; margin: 0 0 8px }
+td.ref { color: var(--muted); background: var(--sunk) }
+th.sel, td.sel { background: var(--accent-soft) }
+table.sens td, table.sens th { text-align: right }
+table.sens tbody th { font-weight: 600; white-space: nowrap }
+td.calor.pos { background: color-mix(in srgb, var(--pos-soft) 40%, transparent) }
+td.calor.pos[data-i="2"], td.calor.pos[data-i="3"] { background: var(--pos-soft) }
+td.calor.pos[data-i="4"] { background: color-mix(in srgb, var(--pos) 30%, var(--pos-soft)) }
+td.calor.neg { background: color-mix(in srgb, var(--neg-soft) 40%, transparent); color: var(--neg) }
+td.calor.neg[data-i="2"], td.calor.neg[data-i="3"] { background: var(--neg-soft) }
+td.calor.neg[data-i="4"] { background: color-mix(in srgb, var(--neg) 25%, var(--neg-soft)) }
+td.calor.base { outline: 2px solid var(--ink); outline-offset: -2px; font-weight: 700 }
+.sup-pl label { display: flex; flex-direction: column; gap: 2px; min-width: 150px }
+.sup-pl input { width: 130px }
+#pl-sup table input[type="text"] { width: 180px } #pl-sup table input[type="number"] { width: 110px }
